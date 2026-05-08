@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Users {
+  name  String
+  email String @unique
+  id    Int    @id @unique @default(autoincrement())
+
+  password String
+}
+
+model Sessions {
+  userId    Int
+  sessionId Int @id
+  createdAt Int
+}

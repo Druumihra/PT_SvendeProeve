@@ -1,0 +1,27 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Users {
+  name   String
+  id     Int      @unique
+  groups Groups[]
+}
+
+model Groups {
+  id           Int
+  name         String @unique
+  participants Users? @relation(fields: [usersId], references: [id])
+  usersId      Int?
+}
+
+model Challenges {
+  name        String
+  id          Int    @unique
+  description String
+}
