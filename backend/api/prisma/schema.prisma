@@ -25,3 +25,11 @@ model Challenges {
   id          Int    @unique
   description String
 }
+
+model Challenge {
+  id Int @unique
+  
+}
+
+
+//needs to flesh out the groups and challenge models

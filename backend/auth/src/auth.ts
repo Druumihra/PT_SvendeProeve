@@ -3,6 +3,7 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
+import { prisma } from '../lib/prisma';
 
 const app = express();
 app.use(express.json());
@@ -44,7 +45,7 @@ app.post('/login', async (req: any, res: any) => {
     return res.status(400).json('Please fill out all required fields.');
   }
 
-  const user = await prisma.user.findFirst({
+  const user = await prisma.users.findFirst({
     where: { name: req.body.username },
   });
   if (!user) {
@@ -66,6 +67,22 @@ app.post('/login', async (req: any, res: any) => {
   const token = createJWT(user.name, user.id, sessionId, privateKey);
   res.status(200).cookie('session', token).json('Success');
 });
+
+let auth = async (req: any, res: any) => {
+  const token = req.headers['cookie'].split('session=')[1];
+  await jwt.verify(token, publicKey, async function (err: any, decoded: any) {
+    if (err) {
+      res.status(400).json('Unauthorized');
+    } else {
+      let result = await prisma.sessions.findFirst({
+        where: {
+          userId: decoded.data.id,
+          sessionId: decoded.data.session,
+        },
+      });
+    }
+  });
+};
 
 app.post('/logout', async (req: any, res: any) => {
   const token = req.headers['cookie'].split('session=')[1];
@@ -104,7 +121,7 @@ app.post('/createUser', async (req: any, res: any) => {
     return res.status(400).json('Please fill out all required fields.');
   }
 
-  const user = await prisma.user.findFirst({
+  const user = await prisma.users.findFirst({
     where: { name: req.body.username },
   });
   if (user) {
@@ -113,7 +130,7 @@ app.post('/createUser', async (req: any, res: any) => {
 
   const password = bcrypt.hashSync(req.body.password, 10);
 
-  await prisma.user.create({
+  await prisma.users.create({
     data: {
       name: req.body.username,
       password: password,
@@ -122,6 +139,12 @@ app.post('/createUser', async (req: any, res: any) => {
   });
 
   res.status(200).json('Success');
+});
+
+app.post('/verify', async (req: any, res: any) => {
+  auth(req, res);
+
+  res.status(200).json('Authorized');
 });
 
 app.get('/getPublicKey');

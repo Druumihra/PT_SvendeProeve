@@ -9,6 +9,7 @@ export default defineConfig({
     path: 'prisma/migrations',
   },
   datasource: {
-    url: env('DATABASE_URL'),
+    url: 'mysql://root:secure_password@localhost:3306/authdb',
+    // url: env('DATABASE_URL'),
   },
 });

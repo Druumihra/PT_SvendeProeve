@@ -34,6 +34,7 @@ services:
       database:
         condition: service_healthy
     ports:
+    ## need to change port
       - 4000:3000
     env_file:
       - api.env
@@ -52,10 +53,30 @@ services:
       - frontend
  
  
- # auth:
- #   networks:
- #     - backend
- #     - frontend
+  auth:
+    build: ./backend/auth
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+    ports:
+    ## need to change port
+      - 4000:3000
+    env_file:
+      - auth.env
+    develop:
+      watch:
+        - action: rebuild
+          path: ./backend/auth
+          target: /auth
+          initial_sync: true
+          ignore:
+            - node_modules/
+        - action: rebuild
+          path: package.json
+    networks:
+      - backend
+      - frontend
  
 
  
