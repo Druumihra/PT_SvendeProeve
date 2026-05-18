@@ -35,6 +35,7 @@ class RegisterPage extends StatelessWidget {
           children: [
             SizedBox(
               width: 300,
+              height: 50,
               child: TextField(
                 style: const TextStyle(color: Colors.white),
                 cursorColor: Colors.white,
@@ -43,11 +44,11 @@ class RegisterPage extends StatelessWidget {
                   hintText: 'Username',
                   hintStyle: TextStyle(color: Colors.white54),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                    borderRadius: BorderRadius.all(Radius.circular(25)),
                     borderSide: BorderSide(color: Colors.white54),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                    borderRadius: BorderRadius.all(Radius.circular(25)),
                     borderSide: BorderSide(color: Colors.white),
                   ),
                 ),
@@ -56,6 +57,7 @@ class RegisterPage extends StatelessWidget {
             const SizedBox(height: 16),
             SizedBox(
               width: 300,
+              height: 50,
               child: TextField(
                 style: const TextStyle(color: Colors.white),
                 cursorColor: Colors.white,
@@ -64,28 +66,36 @@ class RegisterPage extends StatelessWidget {
                   hintText: 'Password',
                   hintStyle: TextStyle(color: Colors.white54),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                    borderRadius: BorderRadius.all(Radius.circular(25)),
                     borderSide: BorderSide(color: Colors.white54),
                   ),
                   focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(Radius.circular(8.0)),
+                    borderRadius: BorderRadius.all(Radius.circular(25)),
                     borderSide: BorderSide(color: Colors.white),
                   ),
                 ),
                 obscureText: true,
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 64),
             SizedBox(
-              width: 300,
-              child: FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: Colors.black54),
+              width: 150,
+              height: 50,
+              child: ElevatedButton(
                 onPressed: () {
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute(builder: (_) => HomePage()));
+                  // _registerPressed(username.text, password.text);
                 },
-                child: const Text('Register'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                  overlayColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                ),
+                child: const Text(
+                  'Register',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
             ),
             const SizedBox(height: 16),
@@ -93,23 +103,8 @@ class RegisterPage extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(),
               child: RichText(
                 text: TextSpan(
-                  children: <TextSpan>[
-                    const TextSpan(
-                      text: 'Har du allerede en konto? Klik ',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    TextSpan(
-                      text: 'her',
-                      style: TextStyle(
-                        color: Theme.of(context).primaryColor,
-                        decoration: TextDecoration.underline,
-                      ),
-                    ),
-                    const TextSpan(
-                      text: ' for at logge ind på din konto i stedet.',
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
+                  text: 'Already have an account? Click here to login.',
+                  style: TextStyle(color: Colors.white),
                 ),
               ),
             ),
