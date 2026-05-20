@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/home.dart';
-import 'package:cc_app/pages/search.dart';
-import 'package:cc_app/widgets/bottom_options.dart';
+import 'package:cc_app/pages/search_for_friends.dart';
+import 'package:cc_app/pages/user.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -68,7 +68,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   static const String _membersPrefix = 'group_members_';
   static const String _userPointsPrefix = 'user_points_';
 
-  int _selectedIndex = 2;
+  int _selectedIndex = 1;
   bool _isLoading = true;
   int _groupPoints = 0;
   List<ChallengeEntry> _challenges = [];
@@ -392,7 +392,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                                     },
                                     icon: const Icon(
                                       Icons.remove_circle,
-                                      color: Colors.black54,
+                                      color: Colors.black,
                                     ),
                                   ),
                                 ],
@@ -661,25 +661,10 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 ),
                 _buildNavItem(
                   index: 1,
-                  icon: Icons.search,
-                  semanticLabel: 'Search',
-                  onTap: () {
-                    _setSelectedIndex(1);
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const SearchPage(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    );
-                  },
-                ),
-                _buildNavItem(
-                  index: 2,
                   icon: Icons.groups,
                   semanticLabel: 'Groups',
                   onTap: () {
-                    _setSelectedIndex(2);
+                    _setSelectedIndex(1);
                     Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (_, __, ___) => const GroupsPage(),
@@ -690,10 +675,34 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                   },
                 ),
                 _buildNavItem(
+                  index: 2,
+                  icon: Icons.person_add,
+                  semanticLabel: 'Search',
+                  onTap: () {
+                    _setSelectedIndex(2);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const SearchPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
+                ),
+                _buildNavItem(
                   index: 3,
                   icon: Icons.person,
                   semanticLabel: 'Profile',
-                  onTap: () => showBottomOptions(context, 1),
+                  onTap: () {
+                    _setSelectedIndex(3);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const UserPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

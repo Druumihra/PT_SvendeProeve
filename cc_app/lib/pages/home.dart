@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 import 'package:cc_app/pages/groups.dart';
-import 'package:cc_app/pages/search.dart';
-import 'package:cc_app/widgets/bottom_options.dart';
+import 'package:cc_app/pages/search_for_friends.dart';
+import 'package:cc_app/pages/user.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -57,16 +58,6 @@ class _ChallengeSnapshot {
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
-  List<Color> get availableColors => const <Color>[
-    Colors.purple,
-    Colors.yellow,
-    Colors.blue,
-    Colors.orange,
-    Colors.pink,
-    Colors.red,
-  ];
-
-  final Color barBackgroundColor = const Color(0x4DFFFFFF);
   final Color barColor = Colors.black;
   final Color touchedBarColor = Colors.green;
 
@@ -144,7 +135,7 @@ class _HomePageState extends State<HomePage> {
       });
       return;
     }
-
+    final user = FirebaseAuth.instance.currentUser;
     final key = _sanitizeKey(selectedGroup);
     final storedChallenges =
         prefs.getStringList('$_challengesPrefix$key') ?? [];
@@ -157,7 +148,7 @@ class _HomePageState extends State<HomePage> {
       prefs.getString('$_userPointsPrefix$key'),
     );
 
-    final participants = <String>{'You', ...members};
+    final participants = <String>{'${user!.displayName} (You)', ...members};
     final leaderboardEntries =
         participants
             .map((name) => MapEntry(name, userPoints[name] ?? 0))
@@ -255,11 +246,13 @@ class _HomePageState extends State<HomePage> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
+          backgroundColor: Colors.white,
           title: const Text('Choose a group'),
           content: const Text('You are not part of any groups yet.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
+              style: TextButton.styleFrom(foregroundColor: Colors.black),
               child: const Text('OK'),
             ),
           ],
@@ -271,6 +264,7 @@ class _HomePageState extends State<HomePage> {
     final selectedGroup = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        backgroundColor: Colors.white,
         title: const Text('Choose a group'),
         content: ConstrainedBox(
           constraints: const BoxConstraints(maxHeight: 320),
@@ -294,6 +288,7 @@ class _HomePageState extends State<HomePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(),
+            style: TextButton.styleFrom(foregroundColor: Colors.black),
             child: const Text('Cancel'),
           ),
         ],
@@ -563,7 +558,7 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 30),
               SizedBox(
                 width: 350,
-                height: 240,
+                height: 200,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(25),
                   child: Container(
@@ -592,7 +587,7 @@ class _HomePageState extends State<HomePage> {
                                 'Select a group to view challenges.',
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: Colors.black54),
+                                    ?.copyWith(color: Colors.black),
                               ),
                             ),
                           )
@@ -603,7 +598,7 @@ class _HomePageState extends State<HomePage> {
                                 'No active challenges in this group yet.',
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: Colors.black54),
+                                    ?.copyWith(color: Colors.black),
                               ),
                             ),
                           )
@@ -645,7 +640,7 @@ class _HomePageState extends State<HomePage> {
               const SizedBox(height: 30),
               SizedBox(
                 width: 350,
-                height: 354,
+                height: 325,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(25),
                   child: Container(
@@ -674,7 +669,7 @@ class _HomePageState extends State<HomePage> {
                                 'Select a group to view leaderboard data.',
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.bodyMedium
-                                    ?.copyWith(color: Colors.black54),
+                                    ?.copyWith(color: Colors.black),
                               ),
                             ),
                           )
@@ -743,7 +738,7 @@ class _HomePageState extends State<HomePage> {
                                   child: Text(
                                     'Group total: $_groupPoints pts',
                                     style: Theme.of(context).textTheme.bodySmall
-                                        ?.copyWith(color: Colors.black54),
+                                        ?.copyWith(color: Colors.black),
                                   ),
                                 ),
                               ],
@@ -754,6 +749,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
               ),
+              const SizedBox(height: 30),
             ],
           ),
         ),
@@ -784,25 +780,10 @@ class _HomePageState extends State<HomePage> {
                 ),
                 _buildNavItem(
                   index: 1,
-                  icon: Icons.search,
-                  semanticLabel: 'Search',
-                  onTap: () {
-                    _setSelectedIndex(1);
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const SearchPage(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    );
-                  },
-                ),
-                _buildNavItem(
-                  index: 2,
                   icon: Icons.groups,
                   semanticLabel: 'Groups',
                   onTap: () {
-                    _setSelectedIndex(2);
+                    _setSelectedIndex(1);
                     Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (_, __, ___) => const GroupsPage(),
@@ -813,10 +794,34 @@ class _HomePageState extends State<HomePage> {
                   },
                 ),
                 _buildNavItem(
+                  index: 2,
+                  icon: Icons.person_add,
+                  semanticLabel: 'Search',
+                  onTap: () {
+                    _setSelectedIndex(2);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const SearchPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
+                ),
+                _buildNavItem(
                   index: 3,
                   icon: Icons.person,
                   semanticLabel: 'Profile',
-                  onTap: () => showBottomOptions(context, 1),
+                  onTap: () {
+                    _setSelectedIndex(3);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const UserPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

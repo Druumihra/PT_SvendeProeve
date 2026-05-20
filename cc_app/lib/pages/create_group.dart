@@ -1,7 +1,7 @@
 import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/home.dart';
-import 'package:cc_app/pages/search.dart';
-import 'package:cc_app/widgets/bottom_options.dart';
+import 'package:cc_app/pages/search_for_friends.dart';
+import 'package:cc_app/pages/user.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,7 +18,7 @@ class CreateGroupPage extends StatefulWidget {
 }
 
 class _CreateGroupPageState extends State<CreateGroupPage> {
-  int _selectedIndex = 2;
+  int _selectedIndex = 1;
   late TextEditingController _groupNameController;
   late TextEditingController _emailController;
   List<String> _invitedEmails = [];
@@ -281,7 +281,7 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                 child: ElevatedButton(
                   onPressed: _sendInvitations,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black54,
+                    backgroundColor: Colors.black,
                     overlayColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(25),
@@ -323,25 +323,10 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                 ),
                 _buildNavItem(
                   index: 1,
-                  icon: Icons.search,
-                  semanticLabel: 'Search',
-                  onTap: () {
-                    _setSelectedIndex(1);
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const SearchPage(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    );
-                  },
-                ),
-                _buildNavItem(
-                  index: 2,
                   icon: Icons.groups,
                   semanticLabel: 'Groups',
                   onTap: () {
-                    _setSelectedIndex(2);
+                    _setSelectedIndex(1);
                     Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (_, __, ___) => const GroupsPage(),
@@ -352,10 +337,34 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                   },
                 ),
                 _buildNavItem(
+                  index: 2,
+                  icon: Icons.person_add,
+                  semanticLabel: 'Search',
+                  onTap: () {
+                    _setSelectedIndex(2);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const SearchPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
+                ),
+                _buildNavItem(
                   index: 3,
                   icon: Icons.person,
                   semanticLabel: 'Profile',
-                  onTap: () => showBottomOptions(context, 1),
+                  onTap: () {
+                    _setSelectedIndex(3);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const UserPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

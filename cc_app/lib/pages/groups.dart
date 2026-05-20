@@ -1,7 +1,7 @@
 import 'package:cc_app/pages/create_group.dart';
 import 'package:cc_app/pages/group_detail.dart';
-import 'package:cc_app/pages/search.dart';
-import 'package:cc_app/widgets/bottom_options.dart';
+import 'package:cc_app/pages/search_for_friends.dart';
+import 'package:cc_app/pages/user.dart';
 import 'package:cc_app/pages/home.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +18,7 @@ class GroupsPage extends StatefulWidget {
 }
 
 class _GroupsPageState extends State<GroupsPage> {
-  int _selectedIndex = 2;
+  int _selectedIndex = 1;
   bool _isLoading = true;
   String? _loadError;
   List<String> _friendGroups = const [];
@@ -154,7 +154,7 @@ class _GroupsPageState extends State<GroupsPage> {
                     subtitle,
                     style: Theme.of(
                       context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.black54),
+                    ).textTheme.bodySmall?.copyWith(color: Colors.black),
                   ),
                 ],
               ),
@@ -244,8 +244,9 @@ class _GroupsPageState extends State<GroupsPage> {
                         padding: const EdgeInsets.symmetric(vertical: 24),
                         child: Text(
                           _loadError!,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(color: Colors.black54),
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodyMedium?.copyWith(color: Colors.black),
                         ),
                       )
                     else ...[
@@ -256,7 +257,7 @@ class _GroupsPageState extends State<GroupsPage> {
                             'You haven\'t created or joined any groups yet.',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.black54),
+                                ?.copyWith(color: Colors.black),
                           ),
                         )
                       else
@@ -270,6 +271,15 @@ class _GroupsPageState extends State<GroupsPage> {
 
                       const SizedBox(height: 20),
 
+                      Text(
+                        'Group invites',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
                       Text(
                         'Groups a friend is part of',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -286,7 +296,7 @@ class _GroupsPageState extends State<GroupsPage> {
                             'Pull down to refresh when your friend joins a group.',
                             textAlign: TextAlign.center,
                             style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: Colors.black54),
+                                ?.copyWith(color: Colors.black),
                           ),
                         )
                       else
@@ -328,25 +338,10 @@ class _GroupsPageState extends State<GroupsPage> {
                 ),
                 _buildNavItem(
                   index: 1,
-                  icon: Icons.search,
-                  semanticLabel: 'Search',
-                  onTap: () {
-                    _setSelectedIndex(1);
-                    Navigator.of(context).push(
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => const SearchPage(),
-                        transitionDuration: Duration.zero,
-                        reverseTransitionDuration: Duration.zero,
-                      ),
-                    );
-                  },
-                ),
-                _buildNavItem(
-                  index: 2,
                   icon: Icons.groups,
                   semanticLabel: 'Groups',
                   onTap: () {
-                    _setSelectedIndex(2);
+                    _setSelectedIndex(1);
                     Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (_, __, ___) => const GroupsPage(),
@@ -357,10 +352,34 @@ class _GroupsPageState extends State<GroupsPage> {
                   },
                 ),
                 _buildNavItem(
+                  index: 2,
+                  icon: Icons.person_add,
+                  semanticLabel: 'Search',
+                  onTap: () {
+                    _setSelectedIndex(2);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const SearchPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
+                ),
+                _buildNavItem(
                   index: 3,
                   icon: Icons.person,
                   semanticLabel: 'Profile',
-                  onTap: () => showBottomOptions(context, 1),
+                  onTap: () {
+                    _setSelectedIndex(3);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const UserPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

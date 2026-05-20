@@ -1,13 +1,13 @@
-import 'package:cc_app/pages/register.dart';
 import 'package:flutter/material.dart';
-import 'package:cc_app/prefs.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cc_app/pages/login.dart';
-import 'package:cc_app/pages/home.dart';
-import 'package:cc_app/controllers/user.dart';
-import 'package:cc_app/client.dart';
-import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(
     MaterialApp(
       debugShowCheckedModeBanner: false,
