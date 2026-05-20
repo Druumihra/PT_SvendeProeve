@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cc_app/pages/home.dart';
 
 class RegisterPage extends StatelessWidget {
   RegisterPage({super.key});
@@ -86,7 +85,7 @@ class RegisterPage extends StatelessWidget {
                   // _registerPressed(username.text, password.text);
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black54,
+                  backgroundColor: Colors.black,
                   overlayColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(25),
@@ -101,8 +100,9 @@ class RegisterPage extends StatelessWidget {
             const SizedBox(height: 16),
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
               child: RichText(
-                text: TextSpan(
+                text: const TextSpan(
                   text: 'Already have an account? Click here to login.',
                   style: TextStyle(color: Colors.white),
                 ),

@@ -10,6 +10,17 @@
 	<string>Cc App</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<string>549481141467-7cjkoe10k0d0j75l2l5gg639avqgpafe.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+		<array>
+    		<dict>
+        		<key>CFBundleTypeRole</key>
+        			<string>Editor</string>
+        		<key>CFBundleURLSchemes</key>
+       	 	<array>
+            	<string>com.googleusercontent.apps.549481141467-7cjkoe10k0d0j75l2l5gg639avqgpafe</string>
+        	</array>
+    	</dict>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>

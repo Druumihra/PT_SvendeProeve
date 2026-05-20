@@ -1,6 +1,6 @@
 import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/home.dart';
-import 'package:cc_app/widgets/bottom_options.dart';
+import 'package:cc_app/pages/user.dart';
 import 'package:flutter/material.dart';
 
 class SearchPage extends StatefulWidget {
@@ -11,7 +11,7 @@ class SearchPage extends StatefulWidget {
 }
 
 class _SearchPageState extends State<SearchPage> {
-  int _selectedIndex = 1;
+  int _selectedIndex = 2;
 
   void _setSelectedIndex(int index) {
     setState(() {
@@ -142,18 +142,10 @@ class _SearchPageState extends State<SearchPage> {
                 ),
                 _buildNavItem(
                   index: 1,
-                  icon: Icons.search,
-                  semanticLabel: 'Search',
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                  },
-                ),
-                _buildNavItem(
-                  index: 2,
                   icon: Icons.groups,
                   semanticLabel: 'Groups',
                   onTap: () {
-                    _setSelectedIndex(2);
+                    _setSelectedIndex(1);
                     Navigator.of(context).push(
                       PageRouteBuilder(
                         pageBuilder: (_, __, ___) => const GroupsPage(),
@@ -164,10 +156,27 @@ class _SearchPageState extends State<SearchPage> {
                   },
                 ),
                 _buildNavItem(
+                  index: 2,
+                  icon: Icons.person_add,
+                  semanticLabel: 'Search',
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
+                  },
+                ),
+                _buildNavItem(
                   index: 3,
                   icon: Icons.person,
                   semanticLabel: 'Profile',
-                  onTap: () => showBottomOptions(context, 1),
+                  onTap: () {
+                    _setSelectedIndex(3);
+                    Navigator.of(context).push(
+                      PageRouteBuilder(
+                        pageBuilder: (_, __, ___) => const UserPage(),
+                        transitionDuration: Duration.zero,
+                        reverseTransitionDuration: Duration.zero,
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

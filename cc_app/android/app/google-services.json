@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "549481141467",
+    "project_id": "svendeprojekt-c3234",
+    "storage_bucket": "svendeprojekt-c3234.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:549481141467:android:3258612cfc936e6ba8a8fe",
+        "android_client_info": {
+          "package_name": "com.example.cc_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "549481141467-n5dhtvp58ejo86pad9ihthodvmlf1qh3.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.cc_app",
+            "certificate_hash": "865c4e0ccaf3a438632be92e17f5328372e4aa08"
+          }
+        },
+        {
+          "client_id": "549481141467-ahblteisnmreea2pmegavrsgtnm0sk3t.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCv6CCCF0hi2p5tzOUbzTLhEgLeRWFnKls"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "549481141467-ahblteisnmreea2pmegavrsgtnm0sk3t.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "549481141467-7cjkoe10k0d0j75l2l5gg639avqgpafe.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.ccApp"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
