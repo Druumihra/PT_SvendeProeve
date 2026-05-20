@@ -35,7 +35,7 @@ services:
         condition: service_healthy
     ports:
     ## need to change port
-      - 4000:3000
+      - 4001:3050
     env_file:
       - api.env
     develop:
