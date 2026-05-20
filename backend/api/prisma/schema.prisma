@@ -1,3 +1,5 @@
+//API
+
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -9,27 +11,26 @@ datasource db {
 
 model Users {
   name   String
-  id     Int      @unique
+  id     Int      @unique @id
   groups Groups[]
 }
 
 model Groups {
-  id           Int
+  id           Int   @id @unique @default(autoincrement())
   name         String @unique
-  participants Users? @relation(fields: [usersId], references: [id])
+  members Users? @relation(fields: [usersId], references: [id])
   usersId      Int?
+  admins Int
+  challenges  Challenges[]
 }
 
 model Challenges {
   name        String
-  id          Int    @unique
+  id          Int    @unique @id @default(autoincrement())
   description String
+  group       Groups? @relation(fields: [groupsId], references: [id])
+  groupsId    Int?
+  active Boolean
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
-
-model Challenge {
-  id Int @unique
-  
-}
-
-
-//needs to flesh out the groups and challenge models

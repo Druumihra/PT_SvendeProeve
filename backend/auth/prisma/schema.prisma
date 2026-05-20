@@ -1,3 +1,5 @@
+//Auth
+
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -12,10 +14,12 @@ model Users {
   email    String @unique
   id       Int    @id @unique @default(autoincrement())
   password String
+  sessions Sessions[]
 }
 
 model Sessions {
   userId    Int
   sessionId Int @id
   createdAt Int
+  user      Users @relation(fields: [userId], references: [id])
 }

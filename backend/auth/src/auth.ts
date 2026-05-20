@@ -57,7 +57,7 @@ app.post('/login', async (req: any, res: any) => {
   }
   let sessionId = Math.floor(Math.random() * 1000000000);
 
-  let result = await prisma.sessions.create({
+  await prisma.sessions.create({
     data: {
       sessionId: sessionId,
       userId: user.id,
@@ -68,27 +68,10 @@ app.post('/login', async (req: any, res: any) => {
   res.status(200).cookie('session', token).json('Success');
 });
 
-let auth = async (req: any, res: any) => {
-  const token = req.headers['cookie'].split('session=')[1];
+let auth = async (token: any) => {
   await jwt.verify(token, publicKey, async function (err: any, decoded: any) {
     if (err) {
-      res.status(400).json('Unauthorized');
-    } else {
-      let result = await prisma.sessions.findFirst({
-        where: {
-          userId: decoded.data.id,
-          sessionId: decoded.data.session,
-        },
-      });
-    }
-  });
-};
-
-app.post('/logout', async (req: any, res: any) => {
-  const token = req.headers['cookie'].split('session=')[1];
-  await jwt.verify(token, publicKey, async function (err: any, decoded: any) {
-    if (err) {
-      res.status(400).json('Unauthorized');
+      return { valid: false, data: null};
     } else {
       let result = await prisma.sessions.findFirst({
         where: {
@@ -97,8 +80,22 @@ app.post('/logout', async (req: any, res: any) => {
         },
       });
       if (result != null) {
+        return { valid: true, data: result.sessionId };
+      }
+      else {
+        return { valid: false, data: null};
+      }
+    }
+  });
+  return { valid: false, data: null};
+};
+
+app.post('/logout', async (req: any, res: any) => {
+  const token = req.headers['cookie'].split('session=')[1];
+  let result = await auth(token);
+      if (result.valid && result.data != null) {
         prisma.sessions.delete({
-          where: { sessionId: decoded.data.session },
+          where: { sessionId: result.data },
         });
 
         prisma.sessions.deleteMany({
@@ -113,9 +110,10 @@ app.post('/logout', async (req: any, res: any) => {
         res.status(400).json('Unauthorized');
       }
     }
-  });
-});
+  );
 
+
+//should send a call to the api service to create a user there
 app.post('/createUser', async (req: any, res: any) => {
   if (!req.body.username || !req.body.password) {
     return res.status(400).json('Please fill out all required fields.');
@@ -142,9 +140,14 @@ app.post('/createUser', async (req: any, res: any) => {
 });
 
 app.post('/verify', async (req: any, res: any) => {
-  auth(req, res);
-
-  res.status(200).json('Authorized');
+  const token = req.headers['cookie'].split('session=')[1];
+  let result = await auth(token);
+  if (result.valid) {
+    return res.status(400).json('Unauthorized');
+  }
+  else {
+    res.status(200).json('Authorized');
+  }
 });
 
 app.get('/getPublicKey');
