@@ -1,28 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cc_app/client.dart';
 
 class RegisterPage extends StatelessWidget {
   RegisterPage({super.key});
 
   final username = TextEditingController();
   final password = TextEditingController();
-
-  /*
-  _registerPressed(String username, String password) async {
-    final res = await context.read<UserController>().register(
-      username,
-      password,
-    );
-    if (res) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Brugeren blev oprettet!')));
-    } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
-    }
-  }
-  */
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +65,7 @@ class RegisterPage extends StatelessWidget {
               height: 50,
               child: ElevatedButton(
                 onPressed: () {
-                  // _registerPressed(username.text, password.text);
+                  Client().register(username.text, password.text);
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,

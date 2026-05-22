@@ -13,9 +13,8 @@ class User {
 }
 
 class Client {
-  final String apiUrl = "";
+  final String apiUrl = "http://localhost:4001";
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  /*
 
   Future<String> login(String username, String password) async {
     final body = json.encode({"username": username, "password": password});
@@ -52,6 +51,7 @@ class Client {
     }
   }
 
+  /*
   Future<void> _sendTokenToBackend(String idToken, String email) async {
     try {
       final body = json.encode({"idToken": idToken, "email": email});
