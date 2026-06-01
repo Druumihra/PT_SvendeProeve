@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
+import fs from 'node:fs';
 
 const app = express();
 app.use(express.json());
@@ -40,6 +41,29 @@ const createJWT = (
   return token;
 };
 
+fs.writeFile(
+  'private.pem',
+  privateKey.export({ type: 'pkcs1', format: 'pem' }),
+  (err) => {
+    if (err) {
+      console.error('Error writing private key:', err);
+    } else {
+      console.log('Private key saved to private.pem');
+    }
+  },
+);
+fs.writeFile(
+  'public.pem',
+  publicKey.export({ type: 'spki', format: 'pem' }),
+  (err) => {
+    if (err) {
+      console.error('Error writing public key:', err);
+    } else {
+      console.log('Public key saved to public.pem');
+    }
+  },
+);
+
 app.post('/login', async (req: any, res: any) => {
   if (!req.body.username || !req.body.password) {
     return res.status(400).json('Please fill out all required fields.');
@@ -69,51 +93,45 @@ app.post('/login', async (req: any, res: any) => {
 });
 
 let auth = async (token: any) => {
-  await jwt.verify(token, publicKey, async function (err: any, decoded: any) {
-    if (err) {
-      return { valid: false, data: null};
+  let decoded = await jwt.verify(token, publicKey);
+  if (typeof decoded == 'string') {
+    return { valid: false, data: null };
+  } else {
+    let result = await prisma.sessions.findFirst({
+      where: {
+        userId: decoded.id,
+        sessionId: decoded.data.session,
+      },
+    });
+    if (result != null) {
+      return { valid: true, data: result.sessionId, userId: result.userId };
     } else {
-      let result = await prisma.sessions.findFirst({
-        where: {
-          userId: decoded.data.id,
-          sessionId: decoded.data.session,
-        },
-      });
-      if (result != null) {
-        return { valid: true, data: result.sessionId };
-      }
-      else {
-        return { valid: false, data: null};
-      }
+      return { valid: false, data: null };
     }
-  });
-  return { valid: false, data: null};
+  }
 };
 
 app.post('/logout', async (req: any, res: any) => {
   const token = req.headers['cookie'].split('session=')[1];
   let result = await auth(token);
-      if (result.valid && result.data != null) {
-        prisma.sessions.delete({
-          where: { sessionId: result.data },
-        });
+  if (result.valid && result.data != null) {
+    prisma.sessions.delete({
+      where: { sessionId: result.data },
+    });
 
-        prisma.sessions.deleteMany({
-          where: {
-            createdAt: {
-              lt: Math.floor(Date.now() / (1000 * 60 * 60) - 2),
-            },
-          },
-        });
-        res.status(200).json('Success');
-      } else {
-        res.status(400).json('Unauthorized');
-      }
-    }
-  );
+    prisma.sessions.deleteMany({
+      where: {
+        createdAt: {
+          lt: Math.floor(Date.now() / (1000 * 60 * 60) - 2),
+        },
+      },
+    });
+    res.status(200).json('Success');
+  } else {
+    res.status(400).json('Unauthorized');
+  }
+});
 
-
-//should send a call to the api service to create a user there
 app.post('/createUser', async (req: any, res: any) => {
   if (!req.body.username || !req.body.password) {
     return res.status(400).json('Please fill out all required fields.');
@@ -135,22 +153,88 @@ app.post('/createUser', async (req: any, res: any) => {
       email: req.body.email,
     },
   });
+  // needs to get proper api endpoint
+  let response = await fetch(`${process.env.API_BASE_URL}/createUser`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      username: req.body.username,
+      id: req.body.id,
+    }),
+  });
+  if (!response.ok) {
+    return res.status(500).json('An error occurred while creating the user.');
+  } else {
+    res.status(200).json('Success');
+  }
+});
 
-  res.status(200).json('Success');
+app.post('/edit/user/', async (req: any, res: any) => {
+  if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
+    res.status(401).json('Unauthorized');
+  }
+  if (!req.body.password) {
+    res.status(400).json('Missing Password');
+  } else {
+    await prisma.users.update({
+      where: { id: req.body.id },
+      data: {
+        password: bcrypt.hashSync(req.body.password, 10) ?? prisma.skip,
+        email: req.body.email ?? prisma.skip,
+      },
+    });
+    return res.status(200).json('Success');
+  }
+});
+
+// app.post('/edit/user/email', async (req: any, res: any) => {
+//   if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
+//     res.status(401).json('Unauthorized');
+//   }
+//   if (!req.body.email) {
+//     res.status(400).json('Missing Email');
+//   } else {
+//     await prisma.users.update({
+//       where: { id: req.body.id },
+//       data: { email: req.body.email },
+//     });
+//     return res.status(200).json('Success');
+//   }
+// });
+
+app.delete('/deleteUser', async (req: any, res: any) => {
+  if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
+    res.status(401).json('Unauthorized');
+  } else {
+    await prisma.users.delete({
+      where: { id: req.body.id },
+    });
+    fetch(`${process.env.API_BASE_URL}/delete/${req.body.id}/User`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        cookie: req.headers['cookie'],
+      },
+      body: JSON.stringify({ id: req.body.id }),
+    });
+  }
 });
 
 app.post('/verify', async (req: any, res: any) => {
   const token = req.headers['cookie'].split('session=')[1];
   let result = await auth(token);
-  if (result.valid) {
+  if (!result.valid) {
     return res.status(400).json('Unauthorized');
-  }
-  else {
+  } else {
     res.status(200).json('Authorized');
   }
 });
 
-app.get('/getPublicKey');
+app.get('/getPublicKey', async (req: any, res: any) => {
+  res.status(200).json(publicKey);
+});
 
 const PORT = 3000;
 app.listen(PORT, () => {

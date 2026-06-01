@@ -1,8 +1,9 @@
 //Auth
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
+  previewFeatures = ["strictUndefinedChecks"]
 }
 
 datasource db {
@@ -11,15 +12,15 @@ datasource db {
 
 model Users {
   name     String
-  email    String @unique
-  id       Int    @id @unique @default(autoincrement())
+  email    String     @unique
+  id       Int        @id @unique @default(autoincrement())
   password String
   sessions Sessions[]
 }
 
 model Sessions {
   userId    Int
-  sessionId Int @id
+  sessionId Int   @id
   createdAt Int
   user      Users @relation(fields: [userId], references: [id])
 }

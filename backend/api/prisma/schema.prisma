@@ -1,8 +1,7 @@
 //API
-
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider        = "prisma-client"
+  output          = "../generated/prisma"
 }
 
 datasource db {
@@ -10,27 +9,59 @@ datasource db {
 }
 
 model Users {
-  name   String
-  id     Int      @unique @id
-  groups Groups[]
+  name              String
+  id                Int                @id @unique
+  profilepicture    String             @default("https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png")
+  groups            Groups[]
+  challengesResults ChallengesResult[]
+  admins            GroupAdmins[]
+  votes             votes[]
 }
 
 model Groups {
-  id           Int   @id @unique @default(autoincrement())
-  name         String @unique
-  members Users? @relation(fields: [usersId], references: [id])
-  usersId      Int?
-  admins Int
-  challenges  Challenges[]
+  id         Int           @id @default(autoincrement())
+  name       String        @unique
+  members    Users?        @relation(fields: [usersId], references: [id])
+  usersId    Int?
+  admins     GroupAdmins[]
+  challenges Challenges[]
+}
+
+model GroupAdmins {
+  id       Int    @id @default(autoincrement())
+  admin    Users  @relation(fields: [usersId], references: [id])
+  group    Groups @relation(fields: [groupsId], references: [id])
+  usersId  Int
+  groupsId Int
 }
 
 model Challenges {
-  name        String
-  id          Int    @unique @id @default(autoincrement())
-  description String
-  group       Groups? @relation(fields: [groupsId], references: [id])
-  groupsId    Int?
-  active Boolean
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name              String
+  id                Int                @id @unique @default(autoincrement())
+  description       String
+  group             Groups?            @relation(fields: [groupsId], references: [id])
+  groupsId          Int?
+  active            Boolean
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  challengesResults ChallengesResult[]
+  votes             votes[]
+}
+
+model votes {
+  id           Int        @id @default(autoincrement())
+  User         Users?     @relation(fields: [usersId], references: [id])
+  Challenge    Challenges @relation(fields: [challengesId], references: [id])
+  usersId      Int?
+  challengesId Int
+  vote         Boolean?
+}
+
+model ChallengesResult {
+  id           Int        @id @default(autoincrement())
+  User         Users      @relation(fields: [usersId], references: [id])
+  Result       String
+  Challenge    Challenges @relation(fields: [challengesId], references: [id])
+  usersId      Int
+  challengesId Int
 }
