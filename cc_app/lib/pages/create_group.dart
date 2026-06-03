@@ -1,3 +1,4 @@
+import 'package:cc_app/client.dart';
 import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/home.dart';
 import 'package:cc_app/pages/search_for_friends.dart';
@@ -279,7 +280,14 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                 width: 150,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: _sendInvitations,
+                  onPressed: () {
+                    _sendInvitations();
+                    /*
+                    Client().createGroup(
+                      _groupNameController.value as String,
+                      _invitedEmails,
+                    );*/
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     overlayColor: Colors.white,

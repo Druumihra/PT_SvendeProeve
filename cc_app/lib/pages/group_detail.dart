@@ -4,6 +4,7 @@ import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/home.dart';
 import 'package:cc_app/pages/search_for_friends.dart';
 import 'package:cc_app/pages/user.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -54,6 +55,74 @@ class ChallengeEntry {
   bool completedOn(String dateKey) => completedDates.contains(dateKey);
 }
 
+class VoteEntry {
+  final String title;
+  final String suggestedBy;
+  final Map<String, bool> votesByMember;
+
+  VoteEntry({
+    required this.title,
+    required this.suggestedBy,
+    Map<String, bool>? votesByMember,
+  }) : votesByMember = votesByMember ?? <String, bool>{};
+
+  factory VoteEntry.fromStoredValue(String value) {
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map<String, dynamic>) {
+        final rawVotes = decoded['votes'];
+        final legacyVoters = decoded['voters'];
+        final votesByMember = <String, bool>{};
+
+        if (rawVotes is Map) {
+          for (final entry in rawVotes.entries) {
+            final key = entry.key.toString();
+            final val = entry.value;
+            if (val is bool) {
+              votesByMember[key] = val;
+            } else {
+              final s = val.toString().trim().toLowerCase();
+              votesByMember[key] = s == 'no' ? false : true;
+            }
+          }
+        } else if (legacyVoters is List) {
+          for (final voter in legacyVoters) {
+            votesByMember[voter.toString()] = true;
+          }
+        }
+
+        return VoteEntry(
+          title: decoded['title']?.toString() ?? 'Untitled vote',
+          suggestedBy: decoded['suggestedBy']?.toString() ?? 'Unknown',
+          votesByMember: votesByMember,
+        );
+      }
+    } catch (_) {}
+
+    return VoteEntry(title: value, suggestedBy: 'Unknown');
+  }
+
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'suggestedBy': suggestedBy,
+    'votes': votesByMember.map((k, v) => MapEntry(k, v)),
+    'voters': votesByMember.entries
+        .where((entry) => entry.value == true)
+        .map((entry) => entry.key)
+        .toList(),
+  };
+
+  String toStoredValue() => jsonEncode(toJson());
+
+  bool? voteFor(String who) => votesByMember[who];
+
+  bool hasVoted(String who) => votesByMember.containsKey(who);
+
+  int get yesCount => votesByMember.values.where((v) => v == true).length;
+
+  int get noCount => votesByMember.values.where((v) => v == false).length;
+}
+
 class GroupDetailPage extends StatefulWidget {
   final String groupName;
   const GroupDetailPage({super.key, required this.groupName});
@@ -67,12 +136,14 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   static const String _pointsPrefix = 'challenge_points_';
   static const String _membersPrefix = 'group_members_';
   static const String _userPointsPrefix = 'user_points_';
+  static const String _votesPrefix = 'votes_';
 
   int _selectedIndex = 1;
   bool _isLoading = true;
   int _groupPoints = 0;
   List<ChallengeEntry> _challenges = [];
   List<String> _members = [];
+  List<VoteEntry> _votes = [];
 
   void _setSelectedIndex(int index) {
     setState(() {
@@ -131,8 +202,22 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
 
   String _membersKey() => '$_membersPrefix${_sanitizeKey(widget.groupName)}';
 
+  String _votesKey() => '$_votesPrefix${_sanitizeKey(widget.groupName)}';
+
   String _userPointsKey() =>
       '$_userPointsPrefix${_sanitizeKey(widget.groupName)}';
+
+  String _currentMemberLabel() {
+    final user = FirebaseAuth.instance.currentUser;
+    return user?.displayName ?? 'You';
+  }
+
+  List<String> _voteParticipants() {
+    final participants = <String>{..._members, _currentMemberLabel()};
+    final ordered = participants.toList();
+    ordered.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return ordered;
+  }
 
   Map<String, int> _readUserPoints(String? rawValue) {
     if (rawValue == null || rawValue.isEmpty) {
@@ -156,9 +241,11 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     final challenges = prefs.getStringList(_challengesKey()) ?? [];
     final points = prefs.getInt(_pointsKey()) ?? 0;
     final members = prefs.getStringList(_membersKey()) ?? [];
+    final votes = prefs.getStringList(_votesKey()) ?? [];
     if (!mounted) return;
     setState(() {
       _challenges = challenges.map(ChallengeEntry.fromStoredValue).toList();
+      _votes = votes.map(VoteEntry.fromStoredValue).toList();
       _groupPoints = points;
       _members = members;
       _isLoading = false;
@@ -172,6 +259,79 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     list.insert(0, entry.toStoredValue());
     await prefs.setStringList(_challengesKey(), list);
     await _loadGroupData();
+  }
+
+  Future<void> _addVote(String title) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList(_votesKey()) ?? [];
+    final entry = VoteEntry(title: title, suggestedBy: _currentMemberLabel());
+    list.insert(0, entry.toStoredValue());
+    await prefs.setStringList(_votesKey(), list);
+    await _loadGroupData();
+  }
+
+  Future<void> _setVoteAt(int index, String member, bool vote) async {
+    if (index < 0 || index >= _votes.length) return;
+    final prefs = await SharedPreferences.getInstance();
+    final current = _votes[index];
+    final updatedVotes = Map<String, bool>.from(current.votesByMember);
+    updatedVotes[member] = vote;
+
+    final updated = VoteEntry(
+      title: current.title,
+      suggestedBy: current.suggestedBy,
+      votesByMember: updatedVotes,
+    );
+
+    final list = prefs.getStringList(_votesKey()) ?? [];
+    if (index < 0 || index >= list.length) return;
+    list[index] = updated.toStoredValue();
+    await prefs.setStringList(_votesKey(), list);
+    await _loadGroupData();
+  }
+
+  Future<void> _showCreateVoteDialog() async {
+    final titleController = TextEditingController();
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        title: const Text('Create challenge vote'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: titleController,
+              decoration: const InputDecoration(
+                hintText: 'Suggested challenge',
+              ),
+              cursorColor: Colors.black,
+              style: const TextStyle(color: Colors.black),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            style: TextButton.styleFrom(foregroundColor: Colors.black),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final text = titleController.text.trim();
+              if (text.isNotEmpty) Navigator.of(ctx).pop(true);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.black),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      await _addVote(titleController.text.trim());
+    }
   }
 
   Future<void> _updateChallengeAt(int index, ChallengeEntry challenge) async {
@@ -479,8 +639,49 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     }
   }
 
+  Widget _buildVoteChoiceButton({
+    required int index,
+    required String member,
+    required bool vote,
+    required String label,
+    required bool? currentVote,
+  }) {
+    final isSelected = currentVote == vote;
+
+    return ElevatedButton(
+      onPressed: () => _setVoteAt(index, member, vote),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: isSelected ? Colors.black : Colors.white,
+        foregroundColor: isSelected ? Colors.white : Colors.black,
+        side: const BorderSide(color: Colors.black12),
+        minimumSize: const Size(0, 36),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+      ),
+      child: Text(label),
+    );
+  }
+
+  Widget _buildVoteStatusChip(bool? vote) {
+    final text = vote == null ? 'Not voted' : (vote ? 'Yes' : 'No');
+    final color = vote == null
+        ? Colors.grey.shade200
+        : (vote ? Colors.green.shade100 : Colors.red.shade100);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(text, style: const TextStyle(color: Colors.black87)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final currentMember = _currentMemberLabel();
+    final voteParticipants = _voteParticipants();
+
     return Scaffold(
       backgroundColor: Colors.black87,
       appBar: AppBar(
@@ -525,6 +726,154 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 ),
               ),
               const SizedBox(height: 18),
+              // Votes section
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Votes',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleLarge?.copyWith(color: Colors.white),
+                  ),
+                  ElevatedButton(
+                    onPressed: _showCreateVoteDialog,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Create vote'),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              if (_isLoading)
+                const SizedBox.shrink()
+              else if (_votes.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.black12),
+                  ),
+                  child: const Text('No active votes.'),
+                )
+              else
+                Column(
+                  children: _votes.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final v = entry.value;
+                    final pendingCount = voteParticipants
+                        .where((member) => !v.hasVoted(member))
+                        .length;
+                    return Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.black12),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      v.title,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodyLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Suggested by ${v.suggestedBy} • ${v.yesCount} yes / ${v.noCount} no / $pendingCount pending',
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Divider(height: 1),
+                          const SizedBox(height: 12),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Vote breakdown',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 8),
+                              ...voteParticipants.map((member) {
+                                final memberVote = v.voteFor(member);
+                                final isCurrentMember = member == currentMember;
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 4,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          isCurrentMember
+                                              ? '$member (You)'
+                                              : member,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                      if (isCurrentMember)
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          children: [
+                                            _buildVoteChoiceButton(
+                                              index: index,
+                                              member: member,
+                                              vote: true,
+                                              label: 'Yes',
+                                              currentVote: memberVote,
+                                            ),
+                                            _buildVoteChoiceButton(
+                                              index: index,
+                                              member: member,
+                                              vote: false,
+                                              label: 'No',
+                                              currentVote: memberVote,
+                                            ),
+                                          ],
+                                        )
+                                      else
+                                        _buildVoteStatusChip(memberVote),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+              const SizedBox(height: 18),
+
+              // Challenges header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [

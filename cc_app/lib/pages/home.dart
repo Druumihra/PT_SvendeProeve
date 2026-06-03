@@ -21,6 +21,11 @@ String _sanitizeKey(String groupName) =>
 
 String _dateKey(DateTime date) => DateUtils.dateOnly(date).toIso8601String();
 
+String _currentMemberLabel() {
+  final user = FirebaseAuth.instance.currentUser;
+  return user?.displayName ?? 'You';
+}
+
 class _ChallengeSnapshot {
   final String title;
   final int points;
@@ -135,7 +140,6 @@ class _HomePageState extends State<HomePage> {
       });
       return;
     }
-    final user = FirebaseAuth.instance.currentUser;
     final key = _sanitizeKey(selectedGroup);
     final storedChallenges =
         prefs.getStringList('$_challengesPrefix$key') ?? [];
@@ -144,14 +148,24 @@ class _HomePageState extends State<HomePage> {
         .toList();
     final members = prefs.getStringList('$_membersPrefix$key') ?? const [];
     final groupPoints = prefs.getInt('$_pointsPrefix$key') ?? 0;
+    final currentMember = _currentMemberLabel();
     final userPoints = _readUserPoints(
       prefs.getString('$_userPointsPrefix$key'),
     );
+    if (userPoints.containsKey('You') &&
+        !userPoints.containsKey(currentMember)) {
+      userPoints[currentMember] = userPoints['You'] ?? 0;
+    }
 
-    final participants = <String>{'${user!.displayName} (You)', ...members};
+    final participants = <String>{currentMember, ...members};
     final leaderboardEntries =
         participants
-            .map((name) => MapEntry(name, userPoints[name] ?? 0))
+            .map(
+              (name) => MapEntry(
+                name == currentMember ? '$name (You)' : name,
+                userPoints[name] ?? 0,
+              ),
+            )
             .toList()
           ..sort((a, b) {
             final scoreCompare = b.value.compareTo(a.value);
