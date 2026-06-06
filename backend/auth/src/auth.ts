@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: 'http://localhost:8080',
+    origin: 'http://localhost:3050',
     credentials: true,
   }),
 );
@@ -174,19 +174,17 @@ app.post('/createUser', async (req: any, res: any) => {
 app.post('/edit/user/', async (req: any, res: any) => {
   if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
     res.status(401).json('Unauthorized');
-  }
-  if (!req.body.password) {
-    res.status(400).json('Missing Password');
   } else {
     await prisma.users.update({
       where: { id: req.body.id },
       data: {
-        password: bcrypt.hashSync(req.body.password, 10) ?? prisma.skip,
-        email: req.body.email ?? prisma.skip,
+        password: bcrypt.hashSync(req.body.password, 10),
+        email: req.body.email,
       },
     });
     return res.status(200).json('Success');
   }
+  res.status(500).json('An error occurred while updating the user.');
 });
 
 // app.post('/edit/user/email', async (req: any, res: any) => {

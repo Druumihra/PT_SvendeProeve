@@ -1,7 +1,7 @@
 //API
 generator client {
-  provider        = "prisma-client"
-  output          = "../generated/prisma"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -16,6 +16,13 @@ model Users {
   challengesResults ChallengesResult[]
   admins            GroupAdmins[]
   votes             votes[]
+  friends           Friends[]
+}
+
+model Friends {
+  id       Int     @id @default(autoincrement())
+  User     Users[]
+  accepted Boolean @default(false)
 }
 
 model Groups {

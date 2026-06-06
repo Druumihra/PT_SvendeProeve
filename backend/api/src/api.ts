@@ -2,6 +2,9 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
+import { Blob } from 'buffer';
+import fs from 'node:fs';
+
 // import type {
 //   UsersModel as user,
 //   GroupsModel as group,
@@ -12,7 +15,7 @@ const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: 'http://localhost:8080',
+    origin: '*',
     credentials: true,
   }),
 );
@@ -24,10 +27,11 @@ app.post('/createUser', async (req: any, res: any) => {
   } else {
     await prisma.users.create({
       data: {
-        username: req.body.username,
+        name: req.body.username,
         id: req.body.id,
       },
     });
+    res.status(200).json('User created successfully.');
   }
 });
 
@@ -49,8 +53,8 @@ async function auth(req: any) {
   }
 }
 
-async function isgroupadmin(groupId: string, userId: string) {
-  let result = await prisma.groupadmins.findFirst({
+async function isgroupadmin(groupId: number, userId: number) {
+  let result = await prisma.groupAdmins.findFirst({
     where: {
       groupId: groupId,
       usersId: userId,
@@ -62,36 +66,107 @@ async function isgroupadmin(groupId: string, userId: string) {
 }
 
 app.put('/edit/:id/user', async (req: any, res: any) => {
+  if (req.body.profilePicture) {
+    const imageblob = new Blob([req.body.profilePicture], {
+      type: 'image/png',
+    });
+  } else {
+    const imageblob = undefined;
+  }
   if (await auth(req.headers['cookie'].split('session=')[1])) {
     res.status(401).json('Unauthorized');
   } else {
     await prisma.users.update({
       where: { id: req.params.id },
       data: {
-        username: req.body.username ?? prisma.skip,
-        profilePicture: req.body.profilePicture ?? prisma.skip,
+        username: req.body.username,
+        profilePicture: imageblob,
       },
     });
-
     // maybe add a fetch to update email and password in auth
+    if (req.body.email || req.body.password) {
+      let response = await fetch('http://localhost:3050/updateAuth', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: req.body.email,
+          password: req.body.password,
+        }),
+      });
+      if (!response.ok) {
+        res.status(500).json(response);
+      }
+    }
     res.status(200).json('Success');
   }
 });
-
+// gets called from auth api
 app.delete('/delete/:id/user', async (req: any, res: any) => {
   if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
     res.status(401).json('Unauthorized');
   } else {
     await prisma.users.delete({
       where: { id: req.params.id },
-      data: {
-        challenegesresult: { deleteMany: { where: { userid: req.params.id } } },
-        disconnect: { challengesresult: true, groups: true },
-      },
+      // data: {
+      //   challengesresult: { deleteMany: { where: { userid: req.params.id } } },
+      //   disconnect: { challengesresult: true, groups: true },
+      // },
     });
   }
 });
 
+app.get('/user/findUsers', async (req: any, res: any) => {
+  prisma.users.findMany({
+    where: {
+      name: { contains: req.body.username },
+    },
+  });
+});
+
+app.get('/user/getUser', async (req: any, res: any) => {
+  let result = prisma.users.findMany({
+    where: { name: { contains: req.body.query } },
+  });
+  res.status(200).json(result);
+});
+
+app.post('/user/addFriend', async (req: any, res: any) => {
+  prisma.friends.create({
+    data: {
+      friendId: req.body.friendId,
+      connect: {
+        users: { id: req.body.userId },
+      },
+    },
+  });
+});
+
+app.put('/user/acceptFriend', async (req: any, res: any) => {
+  prisma.friends.update({
+    where: { friendId: req.body.friendId, usersId: req.body.userId },
+    data: { accepted: true },
+  });
+});
+
+app.delete('/user/removeFriend', async (req: any, res: any) => {
+  prisma.friends.delete({
+    where: { friendId: req.body.friendId, usersId: req.body.userId },
+  });
+});
+
+app.get('/user/getFriends', async (req: any, res: any) => {
+  const friends = await prisma.friends.findMany({
+    where: { friends: { usersId: req.body.userId, accepted: true } },
+    select: { friendId: true },
+  });
+// probs wont work
+  const friends = await prisma.users.findMany({
+    where: { friends: { some: { usersId: req.body.userId, accepted: true } } },
+    select: { name: true, id: true },
+  });
+});
 app.post('/group/create', async (req: any, res: any) => {
   if (await auth(req.headers['cookie'].split('session=')[1])) {
     res.status(401).json('Unauthorized');
@@ -105,10 +180,11 @@ app.post('/group/create', async (req: any, res: any) => {
       name: req.body.groupName,
       members: req.body.userId,
       admins: {
-        create: [{ GroupAdmins: { usersId: req.body.userId } }],
+        create: { usersId: req.body.userId },
       },
     },
   });
+
   if (result === null || result === undefined) {
     res.status(500).json('An error occurred while creating the group.');
   } else {
@@ -124,7 +200,7 @@ app.get('/group/:groupId/getMembers', async (req: any, res: any) => {
     where: { id: req.params.groupId },
     select: { members: true },
   });
-  res.json(members);
+  res.status(200).json(members);
 });
 
 app.post('/group/:groupId/addUser', async (req: any, res: any) => {
@@ -155,7 +231,7 @@ app.post('/group/:groupId/addAdmin', async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
-  await prisma.groupadmins.create({
+  await prisma.groupAdmins.create({
     data: {
       admin: req.body.userId,
       group: { connect: { id: req.params.groupId } },
@@ -213,9 +289,6 @@ app.post('/challenge/create', async (req: any, res: any) => {
     res.status(400).json('Please fill out all required fields.');
   }
   await prisma.challenges.create({
-    where: {
-      id: req.body.challengeId,
-    },
     data: {
       name: req.body.challengeName,
       description: req.body.challengeDescription,
@@ -267,7 +340,7 @@ app.put('/challenge/:challengeId/edit', async (req: any, res: any) => {
 });
 
 app.put('/challenge/:challengeId/end', async (req: any, res: any) => {
-  if (!req.body) {
+  if (await isgroupadmin(req.body.groupId, req.body.userId)) {
     res.status(400).json('Invalid request body');
   } else {
     let result = await prisma.challenges.update({
@@ -294,11 +367,19 @@ app.post('/challenge/:challengeId/delete', async (req: any, res: any) => {
 });
 
 app.post('/challenge/:challengeId/submit', async (req: any, res: any) => {
-  let result = await prisma.challengesresult.create({
-    where: { challengeid: req.params.challengeId },
+  let result = await prisma.challengesResult.create({
     data: {
-      result: req.body.result,
-      connect: { User: { id: req.body.userId } },
+      Result: req.body.result,
+      User: {
+        connect: {
+          id: req.body.userId,
+        },
+      },
+      Challenge: {
+        connect: {
+          id: req.params.challengeId,
+        },
+      },
     },
   });
   if (result === null || result === undefined) {
@@ -311,8 +392,8 @@ app.post('/challenge/:challengeId/submit', async (req: any, res: any) => {
 app.get(
   '/challenge/:challengeId/getPlayerPoints',
   async (req: any, res: any) => {
-    await prisma.challengesresult.findmany({
-      where: { challengeid: req.params.challengeId },
+    await prisma.challengesResult.findMany({
+      where: { challengesId: req.params.challengeId },
     });
   },
 );

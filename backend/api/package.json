@@ -5,11 +5,11 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "api.ts",
+  "main": "/src/api.ts",
   "scripts": {
     "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "npx tsx watch api.ts",
+    "dev": "npx tsx watch src/api.ts",
     "db:deploy": "npx prisma migrate deploy && npx prisma generate"
   },
   "dependencies": {

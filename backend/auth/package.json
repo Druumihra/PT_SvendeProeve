@@ -5,12 +5,15 @@
   "license": "ISC",
   "author": "",
   "type": "module",
-  "main": "auth.ts",
+  "main": "/src/auth.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "npx tsx src/auth.ts",
+    "db:deploy": "npx prisma migrate deploy && npx prisma generate"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
+    "jest-mock-extended": "^4.0.1",
     "prisma": "^7.8.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
