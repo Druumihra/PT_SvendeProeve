@@ -153,7 +153,12 @@ app.post('/createUser', async (req: any, res: any) => {
       email: req.body.email,
     },
   });
-  // needs to get proper api endpoint
+
+  let id = await prisma.users.findFirst({
+    where: { name: req.body.username },
+    select: { id: true },
+  });
+
   let response = await fetch(`${process.env.API_BASE_URL}/createUser`, {
     method: 'POST',
     headers: {
@@ -161,7 +166,7 @@ app.post('/createUser', async (req: any, res: any) => {
     },
     body: JSON.stringify({
       username: req.body.username,
-      id: req.body.id,
+      id: id,
     }),
   });
   if (!response.ok) {
