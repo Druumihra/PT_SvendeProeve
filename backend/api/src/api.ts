@@ -157,7 +157,7 @@ app.delete('/user/removeFriend', auth, async (req: any, res: any) => {
 app.get('/user/getFriends', auth, async (req: any, res: any) => {
   const friendids = await prisma.users.findMany({
     where: { friends: { friendId: req.body.userId, accepted: true } },
-    select: { friendId: true },
+    select: { friends: true },
   });
   // probs wont work
   const friends = await prisma.users.findUnique({
