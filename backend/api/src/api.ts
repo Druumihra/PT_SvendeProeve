@@ -36,20 +36,24 @@ app.post('/createUser', async (req: any, res: any) => {
 });
 
 // apply auth to all routes below this middleware
-async function auth(req: any) {
-  let token = req.headers['cookie'].split('session=')[1];
-  let res = await fetch('http://localhost:3050/verify', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      include: 'credentials',
-      cookie: `session=${token}`,
-    },
-  });
-  if (!res.ok) {
-    return false;
+async function auth(req: any, res: any, next: any) {
+  if (!req.headers['cookie']) {
+    res.status(401).json('Please log in');
   } else {
-    return true;
+    let token = req.headers['cookie'].split('session=')[1];
+    let response = await fetch('http://localhost:3050/verify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        include: 'credentials',
+        cookie: `session=${token}`,
+      },
+    });
+    if (!response.ok) {
+      res.status(401).json('Unauthorized');
+    } else {
+      next();
+    }
   }
 }
 
@@ -65,7 +69,7 @@ async function isgroupadmin(groupId: number, userId: number) {
   } else return false;
 }
 
-app.put('/edit/:id/user', async (req: any, res: any) => {
+app.put('/edit/:id/user', auth, async (req: any, res: any) => {
   if (req.body.profilePicture) {
     const imageblob = new Blob([req.body.profilePicture], {
       type: 'image/png',
@@ -73,51 +77,44 @@ app.put('/edit/:id/user', async (req: any, res: any) => {
   } else {
     const imageblob = undefined;
   }
-  if (await auth(req.headers['cookie'].split('session=')[1])) {
-    res.status(401).json('Unauthorized');
-  } else {
-    await prisma.users.update({
-      where: { id: req.params.id },
-      data: {
-        username: req.body.username,
-        profilePicture: imageblob,
+  await prisma.users.update({
+    where: { id: req.params.id },
+    data: {
+      username: req.body.username,
+      profilePicture: imageblob,
+    },
+  });
+  // maybe add a fetch to update email and password in auth
+  if (req.body.email || req.body.password) {
+    let response = await fetch('http://localhost:3050/updateAuth', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        email: req.body.email,
+        password: req.body.password,
+      }),
     });
-    // maybe add a fetch to update email and password in auth
-    if (req.body.email || req.body.password) {
-      let response = await fetch('http://localhost:3050/updateAuth', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: req.body.email,
-          password: req.body.password,
-        }),
-      });
-      if (!response.ok) {
-        res.status(500).json(response);
-      }
+    if (!response.ok) {
+      res.status(500).json(response);
     }
-    res.status(200).json('Success');
   }
-});
-// gets called from auth api
-app.delete('/delete/:id/user', async (req: any, res: any) => {
-  if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
-    res.status(401).json('Unauthorized');
-  } else {
-    await prisma.users.delete({
-      where: { id: req.params.id },
-      // data: {
-      //   challengesresult: { deleteMany: { where: { userid: req.params.id } } },
-      //   disconnect: { challengesresult: true, groups: true },
-      // },
-    });
-  }
+  res.status(200).json('Success');
 });
 
-app.get('/user/findUsers', async (req: any, res: any) => {
+// gets called from auth api
+app.delete('/delete/:id/user', auth, async (req: any, res: any) => {
+  await prisma.users.delete({
+    where: { id: req.params.id },
+    // data: {
+    //   challengesresult: { deleteMany: { where: { userid: req.params.id } } },
+    //   disconnect: { challengesresult: true, groups: true },
+    // },
+  });
+});
+
+app.get('/user/findUsers', auth, async (req: any, res: any) => {
   prisma.users.findMany({
     where: {
       name: { contains: req.body.username },
@@ -125,14 +122,15 @@ app.get('/user/findUsers', async (req: any, res: any) => {
   });
 });
 
-app.get('/user/getUser', async (req: any, res: any) => {
+app.get('/user/getUser', auth, async (req: any, res: any) => {
   let result = prisma.users.findMany({
     where: { name: { contains: req.body.query } },
   });
   res.status(200).json(result);
 });
 
-app.post('/user/addFriend', async (req: any, res: any) => {
+//rewrite
+app.post('/user/addFriend', auth, async (req: any, res: any) => {
   prisma.friends.create({
     data: {
       friendId: req.body.friendId,
@@ -143,34 +141,35 @@ app.post('/user/addFriend', async (req: any, res: any) => {
   });
 });
 
-app.put('/user/acceptFriend', async (req: any, res: any) => {
+app.put('/user/acceptFriend', auth, async (req: any, res: any) => {
   prisma.friends.update({
     where: { friendId: req.body.friendId, usersId: req.body.userId },
     data: { accepted: true },
   });
 });
 
-app.delete('/user/removeFriend', async (req: any, res: any) => {
+app.delete('/user/removeFriend', auth, async (req: any, res: any) => {
   prisma.friends.delete({
     where: { friendId: req.body.friendId, usersId: req.body.userId },
   });
 });
 
-app.get('/user/getFriends', async (req: any, res: any) => {
-  const friends = await prisma.friends.findMany({
-    where: { friends: { usersId: req.body.userId, accepted: true } },
+app.get('/user/getFriends', auth, async (req: any, res: any) => {
+  const friendids = await prisma.users.findMany({
+    where: { friends: { friendId: req.body.userId, accepted: true } },
     select: { friendId: true },
   });
-// probs wont work
-  const friends = await prisma.users.findMany({
-    where: { friends: { some: { usersId: req.body.userId, accepted: true } } },
+  // probs wont work
+  const friends = await prisma.users.findUnique({
+    where: {
+      id: req.body.id,
+      friends: { some: { usersId: req.body.userId, accepted: true } },
+    },
     select: { name: true, id: true },
   });
 });
-app.post('/group/create', async (req: any, res: any) => {
-  if (await auth(req.headers['cookie'].split('session=')[1])) {
-    res.status(401).json('Unauthorized');
-  }
+
+app.post('/group/create', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
@@ -192,10 +191,7 @@ app.post('/group/create', async (req: any, res: any) => {
   }
 });
 
-app.get('/group/:groupId/getMembers', async (req: any, res: any) => {
-  if (await auth(req.headers['cookie'].split('session=')[1])) {
-    res.status(401).json('Unauthorized');
-  }
+app.get('/group/:groupId/getMembers', auth, async (req: any, res: any) => {
   const members = await prisma.groups.findUnique({
     where: { id: req.params.groupId },
     select: { members: true },
@@ -203,11 +199,8 @@ app.get('/group/:groupId/getMembers', async (req: any, res: any) => {
   res.status(200).json(members);
 });
 
-app.post('/group/:groupId/addUser', async (req: any, res: any) => {
-  if (
-    (await auth(req.headers['cookie'].split('session=')[1])) &&
-    !(await isgroupadmin(req.params.groupId, req.body.userId))
-  ) {
+app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
+  if (!(await isgroupadmin(req.params.groupId, req.body.userId))) {
     res.status(401).json('Unauthorized');
   }
   if (!req.body) {
@@ -221,11 +214,8 @@ app.post('/group/:groupId/addUser', async (req: any, res: any) => {
   });
 });
 
-app.post('/group/:groupId/addAdmin', async (req: any, res: any) => {
-  if (
-    (await auth(req.headers['cookie'].split('session=')[1])) &&
-    !(await isgroupadmin(req.params.groupId, req.body.userId))
-  ) {
+app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
+  if (!(await isgroupadmin(req.params.groupId, req.body.userId))) {
     res.status(401).json('Unauthorized');
   }
   if (!req.body) {
@@ -239,11 +229,8 @@ app.post('/group/:groupId/addAdmin', async (req: any, res: any) => {
   });
 });
 
-app.post('/group/:groupId/kickUser', async (req: any, res: any) => {
-  if (
-    (await auth(req.headers['cookie'].split('session=')[1])) &&
-    !(await isgroupadmin(req.params.groupId, req.body.userId))
-  ) {
+app.post('/group/:groupId/kickUser', auth, async (req: any, res: any) => {
+  if (!(await isgroupadmin(req.params.groupId, req.body.userId))) {
     res.status(401).json('Unauthorized');
   }
   let result = await prisma.groups.delete({
@@ -252,11 +239,8 @@ app.post('/group/:groupId/kickUser', async (req: any, res: any) => {
   res.status(200).json(result);
 });
 
-app.post('/group/:groupId/delete', async (req: any, res: any) => {
-  if (
-    (await auth(req.headers['cookie'].split('session=')[1])) &&
-    !(await isgroupadmin(req.params.groupId, req.body.userId))
-  ) {
+app.post('/group/:groupId/delete', auth, async (req: any, res: any) => {
+  if (!(await isgroupadmin(req.params.groupId, req.body.userId))) {
     res.status(401).json('Unauthorized');
   }
   if (!req.body) {
@@ -269,11 +253,8 @@ app.post('/group/:groupId/delete', async (req: any, res: any) => {
   });
 });
 
-app.put('/group/:groupId/edit', async (req: any, res: any) => {
-  if (
-    (await auth(req.headers['cookie'].split('session=')[1])) &&
-    !(await isgroupadmin(req.params.groupId, req.body.userId))
-  ) {
+app.put('/group/:groupId/edit', auth, async (req: any, res: any) => {
+  if (!(await isgroupadmin(req.params.groupId, req.body.userId))) {
     res.status(401).json('Unauthorized');
   }
   await prisma.groups.update({
@@ -284,7 +265,7 @@ app.put('/group/:groupId/edit', async (req: any, res: any) => {
   });
 });
 
-app.post('/challenge/create', async (req: any, res: any) => {
+app.post('/challenge/create', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
@@ -298,7 +279,7 @@ app.post('/challenge/create', async (req: any, res: any) => {
   });
 });
 
-app.post('/challenges/:groupId/getAll', async (req: any, res: any) => {
+app.post('/challenges/:groupId/getAll', auth, async (req: any, res: any) => {
   const challenges = await prisma.challenges.findMany({
     where: {
       groupsId: req.params.groupId,
@@ -313,7 +294,7 @@ app.post('/challenges/:groupId/getAll', async (req: any, res: any) => {
   res.json(challenges);
 });
 
-app.put('/challenge/:challengeId/edit', async (req: any, res: any) => {
+app.put('/challenge/:challengeId/edit', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Invalid request body.');
   } else {
@@ -339,9 +320,9 @@ app.put('/challenge/:challengeId/edit', async (req: any, res: any) => {
   }
 });
 
-app.put('/challenge/:challengeId/end', async (req: any, res: any) => {
-  if (await isgroupadmin(req.body.groupId, req.body.userId)) {
-    res.status(400).json('Invalid request body');
+app.put('/challenge/:challengeId/end', auth, async (req: any, res: any) => {
+  if (!(await isgroupadmin(req.body.groupId, req.body.userId))) {
+    res.status(401).json('Unauthorized');
   } else {
     let result = await prisma.challenges.update({
       where: {
@@ -355,9 +336,9 @@ app.put('/challenge/:challengeId/end', async (req: any, res: any) => {
   }
 });
 
-app.post('/challenge/:challengeId/delete', async (req: any, res: any) => {
-  if (!req.body) {
-    res.status(400).json('Invalid request body.');
+app.post('/challenge/:challengeId/delete', auth, async (req: any, res: any) => {
+  if (!(await isgroupadmin(req.body.groupId, req.body.userId))) {
+    res.status(401).json('Unauthorized');
   }
   await prisma.challenges.delete({
     where: {
@@ -366,7 +347,7 @@ app.post('/challenge/:challengeId/delete', async (req: any, res: any) => {
   });
 });
 
-app.post('/challenge/:challengeId/submit', async (req: any, res: any) => {
+app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
   let result = await prisma.challengesResult.create({
     data: {
       Result: req.body.result,
@@ -391,6 +372,7 @@ app.post('/challenge/:challengeId/submit', async (req: any, res: any) => {
 
 app.get(
   '/challenge/:challengeId/getPlayerPoints',
+  auth,
   async (req: any, res: any) => {
     await prisma.challengesResult.findMany({
       where: { challengesId: req.params.challengeId },
@@ -398,7 +380,7 @@ app.get(
   },
 );
 
-app.post('/challenge/:challengeId/createvote', async (req: any, res: any) => {
+app.post('/challenge/:challengeId/createvote', auth, async (req: any, res: any) => {
   //should allow a group admin to create a vote for a challenge
   await prisma.challenges.update({
     where: {
@@ -413,7 +395,7 @@ app.post('/challenge/:challengeId/createvote', async (req: any, res: any) => {
   res.status(200).json('Vote sucessfully created.');
 });
 
-app.post('/challenge/:challengeId/vote', async (req: any, res: any) => {
+app.post('/challenge/:challengeId/vote', auth, async (req: any, res: any) => {
   if (req.body.vote.type) {
     res.status(400).json('Invalid vote value.');
   }
