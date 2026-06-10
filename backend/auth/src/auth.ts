@@ -105,9 +105,9 @@ app.post('/login', async (req: any, res: any) => {
       createdAt: Math.floor(Date.now() / (1000 * 60 * 60)),
     },
   });
-  const token = createJWT(user.name, user.id, sessionId, privateKey);
-  res.status(200).cookie('session', token).json('Success', token);
-}); 
+  const token = await createJWT(user.name, user.id, sessionId, privateKey);
+  res.status(200).cookie('session', token).json({ message: 'Success', token });
+});
 
 let auth = async (req: any) => {
   const token = req.headers['cookie'].split('session=')[1];
@@ -156,10 +156,10 @@ app.post('/createUser', async (req: any, res: any) => {
   }
 
   const user = await prisma.users.findFirst({
-    where: { name: req.body.username },
+    where: { name: req.body.username, email: req.body.email },
   });
   if (user) {
-    return res.status(400).json('Username already exists.');
+    return res.status(400).json('User already exists.');
   }
 
   const password = bcrypt.hashSync(req.body.password, 10);
@@ -234,7 +234,8 @@ app.delete('/deleteUser', async (req: any, res: any) => {
     await prisma.users.delete({
       where: { id: req.body.id },
     });
-    fetch(`${process.env.API_BASE_URL}/delete/${req.body.id}/User`, {
+    console.log(process.env.API_URL);
+    fetch(`${process.env.API_URL}/delete/${req.body.id}/User`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',
