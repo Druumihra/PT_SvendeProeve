@@ -106,8 +106,8 @@ app.post('/login', async (req: any, res: any) => {
     },
   });
   const token = createJWT(user.name, user.id, sessionId, privateKey);
-  res.status(200).cookie('session', token).json('Success');
-});
+  res.status(200).cookie('session', token).json('Success', token);
+}); 
 
 let auth = async (req: any) => {
   const token = req.headers['cookie'].split('session=')[1];
