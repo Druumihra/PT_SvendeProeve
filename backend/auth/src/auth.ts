@@ -64,6 +64,23 @@ fs.writeFile(
   },
 );
 
+//
+fs.readFile('private.pem', 'utf8', (err, data) => {
+  if (err) {
+    console.error('Error reading private key:', err);
+  } else {
+    // console.log(data.toString());
+  }
+});
+
+fs.readFile('public.pem', 'utf8', (err, data) => {
+  if (err) {
+    console.error('Error reading public key:', err);
+  } else {
+    // console.log(data.toString());
+  }
+});
+
 app.post('/login', async (req: any, res: any) => {
   if (!req.body.username || !req.body.password) {
     return res.status(400).json('Please fill out all required fields.');
@@ -92,7 +109,8 @@ app.post('/login', async (req: any, res: any) => {
   res.status(200).cookie('session', token).json('Success');
 });
 
-let auth = async (token: any) => {
+let auth = async (req: any) => {
+  const token = req.headers['cookie'].split('session=')[1];
   let decoded = await jwt.verify(token, publicKey);
   if (typeof decoded == 'string') {
     return { valid: false, data: null };
@@ -166,11 +184,13 @@ app.post('/createUser', async (req: any, res: any) => {
     },
     body: JSON.stringify({
       username: req.body.username,
-      id: id,
+      id: id?.id,
     }),
   });
   if (!response.ok) {
-    return res.status(500).json('An error occurred while creating the user.');
+    return res
+      .status(500)
+      .json('An error occurred elsewhere while creating the user.');
   } else {
     res.status(200).json('Success');
   }
@@ -236,7 +256,9 @@ app.post('/verify', async (req: any, res: any) => {
 });
 
 app.get('/getPublicKey', async (req: any, res: any) => {
-  res.status(200).json(publicKey);
+  res
+    .status(200)
+    .json(publicKey.export({ type: 'spki', format: 'pem' }).toString());
 });
 
 const PORT = 3000;
