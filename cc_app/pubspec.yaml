@@ -19,6 +19,8 @@ dependencies:
   http: ^1.1.0
   google_sign_in_all_platforms: ^2.0.2
   flutter_dotenv: ^6.0.1
+  another_flushbar: ^2.2.4
+  jwt_decoder: ^2.0.1
 
 dev_dependencies:
   flutter_test:

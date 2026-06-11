@@ -1,3 +1,5 @@
+import 'package:cc_app/app_flushbar.dart';
+import 'package:cc_app/client.dart';
 import 'package:cc_app/pages/create_group.dart';
 import 'package:cc_app/pages/group_detail.dart';
 import 'package:cc_app/pages/search_for_friends.dart';
@@ -6,12 +8,12 @@ import 'package:cc_app/pages/home.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const String _friendGroupsStorageKey = 'friend_groups';
-const String _myGroupsStorageKey = 'my_groups';
 const String _selectedGroupStorageKey = 'selected_group';
 
 class GroupsPage extends StatefulWidget {
-  const GroupsPage({super.key});
+  final String? successMessage;
+
+  const GroupsPage({super.key, this.successMessage});
 
   @override
   State<GroupsPage> createState() => _GroupsPageState();
@@ -21,8 +23,9 @@ class _GroupsPageState extends State<GroupsPage> {
   int _selectedIndex = 1;
   bool _isLoading = true;
   String? _loadError;
-  List<String> _friendGroups = const [];
-  List<String> _myGroups = const [];
+
+  List<dynamic> _friendGroups = const [];
+  List<dynamic> _myGroups = const [];
 
   void _setSelectedIndex(int index) {
     setState(() {
@@ -66,31 +69,37 @@ class _GroupsPageState extends State<GroupsPage> {
   void initState() {
     super.initState();
     _loadFriendGroups();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.successMessage != null) {
+        AppFlushbar.success(context, widget.successMessage!);
+      }
+    });
   }
 
   Future<void> _loadFriendGroups() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final storedGroups = prefs.getStringList(_friendGroupsStorageKey) ?? [];
-      final storedMyGroups = prefs.getStringList(_myGroupsStorageKey) ?? [];
-
-      if (!mounted) {
-        return;
-      }
-
+    if (token == null || token!["id"] == null) {
       setState(() {
-        _friendGroups = storedGroups;
-        _myGroups = storedMyGroups;
-        _loadError = null;
+        _isLoading = false;
+        _myGroups = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+
+    try {
+      final groups = await Client.myGroups(token!["id"]);
+      setState(() {
+        _myGroups = groups;
         _isLoading = false;
       });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-
+    } catch (e) {
       setState(() {
-        _loadError = 'Could not load groups right now.';
+        _loadError = e.toString();
         _isLoading = false;
       });
     }
@@ -263,7 +272,7 @@ class _GroupsPageState extends State<GroupsPage> {
                       else
                         ..._myGroups.map(
                           (g) => _buildGroupCard(
-                            g,
+                            g['name']?.toString() ?? 'Unnamed Group',
                             subtitle: 'Your group',
                             leadingColor: Colors.black,
                           ),
@@ -301,9 +310,12 @@ class _GroupsPageState extends State<GroupsPage> {
                         )
                       else
                         ..._friendGroups.map(
-                          (g) => _buildGroupCard(g, subtitle: 'Friend group'),
+                          (g) => _buildGroupCard(
+                            g['name']?.toString() ?? 'Unnamed Group',
+                            subtitle: 'Friend group',
+                          ),
                         ),
-                      SizedBox(height: 80),
+                      const SizedBox(height: 80),
                     ],
                   ],
                 ),

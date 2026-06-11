@@ -2,77 +2,157 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 
 class User {
   String id;
   String username;
+  String? email;
+  String? pfpUrl;
 
   User.fromJson(Map<String, dynamic> obj)
-    : id = obj["id"],
-      username = obj["username"];
+    : id = obj["id"].toString(),
+      username = obj["user"],
+      email = obj["email"],
+      pfpUrl = obj["profilepicture"];
 }
 
+Map<String, dynamic> decodeToken(String token) {
+  final decodedToken = JwtDecoder.decode(token);
+
+  return Map<String, dynamic>.from(decodedToken["data"]);
+}
+
+String? encodedToken;
+Map<String, dynamic>? token;
+
 class Client {
-  final String apiUrl = "http://localhost:4001";
+  static final String authUrl = "http://localhost:4000";
+  static final String apiUrl = "http://localhost:4001";
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  String? pfpUrl;
 
   // User endpoints
   Future<String> login(String username, String password) async {
     final body = json.encode({"username": username, "password": password});
 
     final res = await http.post(
-      Uri.parse("$apiUrl/login"),
+      Uri.parse("$authUrl/login"),
       headers: {"Content-Type": "application/json"},
       body: body,
     );
-    final resData = json.decode(res.body);
 
-    if (resData["ok"]) {
-      return resData["token"];
+    final message = json.decode(res.body);
+
+    if (res.statusCode == 200) {
+      encodedToken = message["token"];
+      token = decodeToken(message["token"]) as Map<String, dynamic>?;
+
+      return message.toString();
     } else {
-      throw Exception(resData["message"]);
+      throw message.toString();
     }
   }
 
-  Future<String> register(String username, String password) async {
-    final body = json.encode({"username": username, "password": password});
+  Future<String> logout(String logoutToken) async {
+    final res = await http.post(
+      Uri.parse("$authUrl/logout"),
+      headers: {"Authorization": "Bearer $logoutToken"},
+    );
+
+    final message = json.decode(res.body);
+    token = null;
+    encodedToken = null;
+
+    return "Logged out successfully";
+    /* 
+    if (res.statusCode == 200) {
+      return message.toString();
+    } else {
+      throw message;
+    }
+    */
+  }
+
+  Future<String> register(
+    String username,
+    String email,
+    String password,
+  ) async {
+    final body = json.encode({
+      "username": username,
+      "password": password,
+      "email": email,
+    });
 
     final res = await http.post(
-      Uri.parse("$apiUrl/createUser"),
+      Uri.parse("$authUrl/createUser"),
       headers: {"Content-Type": "application/json"},
       body: body,
     );
 
-    final resData = json.decode(res.body);
+    final message = json.decode(res.body).toString();
 
-    if (resData["ok"]) {
-      return resData["token"];
+    if (res.statusCode == 200) {
+      return message;
     } else {
-      throw Exception(resData["message"]);
+      throw message;
+    }
+  }
+
+  static Future<String> getUserInfo(int userId) async {
+    final res = await http.get(
+      Uri.parse("$apiUrl/user/getUser/$userId"),
+      headers: {
+        "Content-Type": "application/json",
+        "include": "credentials",
+        "bearer": "session=$encodedToken",
+      },
+    );
+
+    final message = json.decode(res.body).toString();
+
+    if (res.statusCode == 200) {
+      return message;
+    } else {
+      throw message;
     }
   }
 
   // Group endpoints
-  Future<String> createGroup(String groupName, List<String> emails) async {
-    final body = json.encode({
-      "name": groupName,
-      "members": emails,
-      "admin": _auth.currentUser?.email ?? "",
-    });
+  Future<String> createGroup(String groupName) async {
+    final body = json.encode({"groupName": groupName, "userId": token!["id"]});
 
     final res = await http.post(
       Uri.parse("$apiUrl/group/create"),
-      headers: {"Content-Type": "application/json"},
+      headers: {
+        "Content-Type": "application/json",
+        "bearer": "session=$encodedToken",
+      },
       body: body,
     );
 
-    final resData = json.decode(res.body);
+    final message = json.decode(res.body);
 
-    if (resData["ok"]) {
-      return resData["token"];
+    if (res.statusCode == 200) {
+      return message;
     } else {
-      throw Exception(resData["message"]);
+      throw Exception(message["message"]);
+    }
+  }
+
+  static Future<List> myGroups(int userId) async {
+    final res = await http.get(
+      Uri.parse("$apiUrl/group/getgroups/$userId"),
+      headers: {"Content-Type": "application/json"},
+    );
+
+    final message = json.decode(res.body);
+
+    if (res.statusCode == 200) {
+      return message['groups'] as List;
+    } else {
+      throw Exception(message["message"] ?? "Failed to load groups");
     }
   }
 
@@ -151,13 +231,31 @@ class Client {
   // Challenge endpoints
   Future<String> createChallenge(
     String challengeName,
-    String description,
-    int groupId,
+    int score,
+    String groupName,
   ) async {
+    debugPrint(token.toString());
+
+    final groups = await Client.myGroups(token!["id"]);
+    debugPrint(groups.toString());
+
+    final matchingGroup = groups.firstWhere(
+      (group) => group["name"] == groupName,
+      orElse: () => null,
+    );
+
+    if (matchingGroup == null) {
+      throw Exception("Group '$groupName' not found.");
+    }
+
+    final int groupId = matchingGroup["id"];
+    String description = "No description provided";
+
     final body = json.encode({
-      "name": challengeName,
-      "description": description,
-      "groupsId": groupId,
+      "challengeName": challengeName,
+      "challengeDescription": description,
+      "score": score,
+      "groupId": groupId,
     });
 
     final res = await http.post(
@@ -165,13 +263,17 @@ class Client {
       headers: {"Content-Type": "application/json"},
       body: body,
     );
+    debugPrint("dd" + res.toString());
 
-    final resData = json.decode(res.body);
+    final message = json.decode(res.body);
 
-    if (resData["ok"]) {
-      return resData["token"];
+    debugPrint(message.toString());
+
+    if (res.statusCode == 200) {
+      debugPrint("Challenge created successfully");
+      return message["message"].toString();
     } else {
-      throw Exception(resData["message"]);
+      throw Exception(message["message"].toString());
     }
   }
 
@@ -271,6 +373,51 @@ class Client {
       return resData["token"];
     } else {
       throw Exception(resData["message"]);
+    }
+  }
+
+  // Friend endpoints
+  static Future<List<dynamic>> findUsers(
+    String query,
+    Map<String, dynamic>? tokenMap,
+  ) async {
+    final res = await http.post(
+      Uri.parse("$apiUrl/user/findUsers/${query}"),
+      headers: {"Content-Type": "application/json"},
+    );
+
+    if (res.statusCode == 200) {
+      return json.decode(res.body) as List<dynamic>;
+    } else {
+      final message = json.decode(res.body);
+      throw Exception(message["message"]);
+    }
+  }
+
+  static Future<List<dynamic>> getFriends(int id, int userId) async {
+    final body = json.encode({"id": id, "userId": userId});
+
+    debugPrint(body.toString());
+
+    final res = await http.post(
+      Uri.parse("$apiUrl/user/getFriends"),
+      headers: {"Content-Type": "application/json"},
+      body: body,
+    );
+
+    final message = json.decode(res.body);
+
+    debugPrint(message.toString());
+
+    if (res.statusCode == 200) {
+      if (message is List) {
+        return message;
+      } else if (message != null) {
+        return [message];
+      }
+      return [];
+    } else {
+      throw Exception("Failed to load friends list");
     }
   }
 

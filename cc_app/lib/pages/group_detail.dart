@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:cc_app/app_flushbar.dart';
+import 'package:cc_app/client.dart';
 import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/home.dart';
 import 'package:cc_app/pages/search_for_friends.dart';
@@ -388,12 +390,9 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     await _loadGroupData();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Submitted successfully. +${challenge.points} points awarded.',
-        ),
-      ),
+    AppFlushbar.success(
+      context,
+      'Challenge submitted! +${challenge.points} points awarded.',
     );
   }
 
@@ -621,7 +620,13 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
+              final message = await Client().createChallenge(
+                titleController.text.trim(),
+                int.tryParse(pointsController.text.trim()) ?? 0,
+                widget.groupName,
+              );
+
               final text = titleController.text.trim();
               final points = int.tryParse(pointsController.text.trim()) ?? 0;
               if (text.isNotEmpty && points > 0) Navigator.of(ctx).pop(true);
@@ -870,9 +875,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                     );
                   }).toList(),
                 ),
-
               const SizedBox(height: 18),
-
               // Challenges header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

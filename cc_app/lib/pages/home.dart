@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'package:cc_app/app_flushbar.dart';
+import 'package:cc_app/client.dart';
 import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/search_for_friends.dart';
 import 'package:cc_app/pages/user.dart';
@@ -23,7 +25,7 @@ String _dateKey(DateTime date) => DateUtils.dateOnly(date).toIso8601String();
 
 String _currentMemberLabel() {
   final user = FirebaseAuth.instance.currentUser;
-  return user?.displayName ?? 'You';
+  return user?.displayName ?? token?["user"] ?? 'You';
 }
 
 class _ChallengeSnapshot {
@@ -61,8 +63,9 @@ class _ChallengeSnapshot {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String? successMessage;
 
+  const HomePage({super.key, this.successMessage});
   final Color barColor = Colors.black;
   final Color touchedBarColor = Colors.green;
 
@@ -74,9 +77,8 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   bool _isLoading = true;
   String? _selectedGroup;
-  List<String> _availableGroups = const [];
   List<_ChallengeSnapshot> _challenges = const [];
-  List<String> _members = const [];
+  List<String> _myGroups = const [];
   List<MapEntry<String, int>> _leaderboardEntries = const [];
   List<FlSpot> _weeklySpots = const [];
   List<DateTime> _weekDates = const [];
@@ -87,6 +89,45 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadHomeData();
+    _loadFriendGroups();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.successMessage != null) {
+        AppFlushbar.success(context, widget.successMessage!);
+      }
+    });
+  }
+
+  Future<void> _loadFriendGroups() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final List<dynamic> rawGroups = await Client.myGroups(token!["id"]);
+
+      final List<String> parsedNames = rawGroups
+          .map((group) => group['name']?.toString() ?? '')
+          .where((name) => name.isNotEmpty)
+          .toList();
+
+      final prefs = await SharedPreferences.getInstance();
+
+      await prefs.setStringList(_myGroupsStorageKey, parsedNames);
+
+      if (!mounted) return;
+
+      setState(() {
+        _myGroups = parsedNames;
+      });
+
+      await _loadHomeData();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _setSelectedIndex(int index) {
@@ -121,10 +162,9 @@ class _HomePageState extends State<HomePage> {
         return;
       }
       setState(() {
-        _availableGroups = groups;
         _selectedGroup = null;
         _challenges = const [];
-        _members = const [];
+        _myGroups = const [];
         _groupPoints = 0;
         _weekDates = List<DateTime>.generate(
           7,
@@ -194,10 +234,9 @@ class _HomePageState extends State<HomePage> {
     }
 
     setState(() {
-      _availableGroups = groups;
       _selectedGroup = selectedGroup;
       _challenges = challenges;
-      _members = members;
+      _myGroups = myGroups;
       _leaderboardEntries = leaderboardEntries;
       _groupPoints = groupPoints;
       _weekDates = weekDates;
@@ -250,7 +289,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _showGroupSelectionDialog() async {
-    final groups = _availableGroups;
+    final groups = _myGroups;
 
     if (!mounted) {
       return;
@@ -321,9 +360,7 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Selected group: $selectedGroup')));
+    AppFlushbar.success(context, 'Selected group: $selectedGroup');
   }
 
   Widget _buildNavItem({
@@ -503,7 +540,7 @@ class _HomePageState extends State<HomePage> {
                           child: Text(
                             groupName == null
                                 ? 'No group selected'
-                                : 'Group: $groupName',
+                                : 'Group: $_selectedGroup',
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
                         ),
@@ -549,7 +586,9 @@ class _HomePageState extends State<HomePage> {
                                       vertical: 4,
                                     ),
                                     child: Text(
-                                      '${getTotalPoints().toStringAsFixed(0)} Points',
+                                      getTotalPoints().round() == 1
+                                          ? '${getTotalPoints().toStringAsFixed(0)} Point'
+                                          : '${getTotalPoints().toStringAsFixed(0)} Points',
                                       style: const TextStyle(
                                         color: Colors.white,
                                       ),
@@ -560,6 +599,11 @@ class _HomePageState extends State<HomePage> {
                               IconButton(
                                 onPressed: _showGroupSelectionDialog,
                                 icon: const Icon(Icons.repeat),
+                                style: IconButton.styleFrom(
+                                  overlayColor: Colors.black.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                ),
                               ),
                             ],
                           ),

@@ -2,68 +2,59 @@ import 'package:flutter/material.dart';
 import 'package:cc_app/client.dart';
 import 'package:cc_app/prefs.dart';
 
-class Session {
-  final User user;
-  final String token;
-
-  const Session({required this.user, required this.token});
-}
-
-/*
 class UserController extends ChangeNotifier {
   final Prefs prefs;
   final Client client;
-  Session? session;
+  String username = "";
+  String? email;
+  String? token;
+  List<dynamic> myGroups = [];
 
-  UserController({required this.prefs, required this.client}) {
+  UserController({
+    required this.prefs,
+    required this.client,
+    required this.token,
+    required this.username,
+    this.email,
+  }) {
     _loadFromPrefs();
   }
 
   void _loadFromPrefs() async {
-    final token = await prefs.getToken();
-    if (token == null) {
+    final savedToken = await prefs.getToken();
+    if (savedToken == null) {
       return;
     }
-    await refreshSessionWithToken(token);
-  }
-  Future<String> register(String username, String password) async {
-    final resData = await client.register(username, password);
-
-    if (resData["ok"]) {
-      return resData["token"];
-    } else {
-      throw Exception(resData["message"]);
-    }
+    token = savedToken;
+    notifyListeners();
   }
 
   Future<String> login(String username, String password) async {
     final res = await client.login(username, password);
-    switch (res) {
-      case Ok(data: final token):
-        return await refreshSessionWithToken(token);
-      case Err(message: final message):
-        throw Exception(message);
-    }
+
+    token = res.split("token: ").last.split("}").first;
+
+    String message = res
+        .split("message: ")
+        .last
+        .split("}")
+        .first
+        .split(",")
+        .first;
+
+    return message;
   }
 
-  Future<Result<Null>> logout() async {
-    session = null;
+  Future<void> logout() async {
+    if (token != null) {
+      await client.logout(token!);
+    }
+
+    token = null;
+    username = "";
+    email = null;
+    myGroups = [];
+
     notifyListeners();
-    return Ok(null);
-  }
-
-  Future<Result<Null>> refreshSessionWithToken(String token) async {
-    final res = await client.getUserInfo(token);
-    switch (res) {
-      case Ok(data: final user):
-        await prefs.setToken(token);
-        session = Session(user: user, token: token);
-        notifyListeners();
-        return Ok(null);
-      case Err(message: final message):
-        await prefs.removeToken();
-        return Err(message);
-    }
   }
 }
-*/

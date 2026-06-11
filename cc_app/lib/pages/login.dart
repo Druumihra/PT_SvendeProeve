@@ -1,4 +1,5 @@
-import 'package:cc_app/client.dart';
+import 'package:cc_app/app_flushbar.dart';
+import 'package:cc_app/controllers/user.dart';
 import 'package:cc_app/pages/home.dart';
 import 'package:cc_app/pages/register.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,21 +7,25 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_sign_in_all_platforms/google_sign_in_all_platforms.dart';
 import 'package:cc_app/google_auth_service.dart';
+import 'package:provider/provider.dart';
 
 class LoginPage extends StatefulWidget {
-  LoginPage({super.key});
+  final String? successMessage;
+
+  const LoginPage({super.key, this.successMessage});
 
   @override
   State<LoginPage> createState() => _LoginPageState();
 }
 
+final username = TextEditingController();
+final password = TextEditingController();
+
 class _LoginPageState extends State<LoginPage> {
   final username = TextEditingController();
   final password = TextEditingController();
-  final Client _client = Client();
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  String? _userId;
   bool _isLoading = false;
   bool _navigatedToHome = false;
 
@@ -47,7 +52,6 @@ class _LoginPageState extends State<LoginPage> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           setState(() {
-            _userId = user.email;
             _isLoading = false;
           });
           _goToHome();
@@ -58,7 +62,6 @@ class _LoginPageState extends State<LoginPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_auth.currentUser != null) {
         setState(() {
-          _userId = _auth.currentUser?.email;
           _isLoading = false;
         });
         _goToHome();
@@ -121,7 +124,6 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
       setState(() {
-        _userId = userCredential?.user?.email;
         _isLoading = false;
       });
       _goToHome();
@@ -137,7 +139,6 @@ class _LoginPageState extends State<LoginPage> {
 
             if (retriedUserCredential != null && mounted) {
               setState(() {
-                _userId = retriedUserCredential.user?.email;
                 _isLoading = false;
               });
               _goToHome();
@@ -171,6 +172,12 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.successMessage != null) {
+        AppFlushbar.success(context, widget.successMessage!);
+      }
+    });
+
     return Scaffold(
       backgroundColor: Colors.black87,
       body: Center(
@@ -182,6 +189,7 @@ class _LoginPageState extends State<LoginPage> {
                 width: 300,
                 height: 50,
                 child: TextField(
+                  controller: username,
                   style: const TextStyle(color: Colors.white),
                   cursorColor: Colors.white,
                   decoration: const InputDecoration(
@@ -204,6 +212,7 @@ class _LoginPageState extends State<LoginPage> {
                 width: 300,
                 height: 50,
                 child: TextField(
+                  controller: password,
                   style: const TextStyle(color: Colors.white),
                   cursorColor: Colors.white,
                   decoration: const InputDecoration(
@@ -227,13 +236,49 @@ class _LoginPageState extends State<LoginPage> {
                 width: 150,
                 height: 50,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).push(
-                    PageRouteBuilder(
-                      pageBuilder: (_, __, ___) => HomePage(),
-                      transitionDuration: Duration.zero,
-                      reverseTransitionDuration: Duration.zero,
-                    ),
-                  ),
+                  onPressed: () async {
+                    try {
+                      final message = await context
+                          .read<UserController>()
+                          .login(username.text, password.text);
+
+                      if (context.mounted) {
+                        AppFlushbar.success(context, message);
+                        if (context.mounted) {
+                          Navigator.of(context).pushReplacement(
+                            PageRouteBuilder(
+                              pageBuilder: (_, __, ___) =>
+                                  HomePage(successMessage: message),
+                              transitionDuration: Duration.zero,
+                              reverseTransitionDuration: Duration.zero,
+                            ),
+                          );
+                        }
+                        if (context.mounted) {
+                          Navigator.of(context).pushReplacement(
+                            PageRouteBuilder(
+                              pageBuilder: (_, __, ___) =>
+                                  HomePage(successMessage: message),
+                              transitionDuration: Duration.zero,
+                              reverseTransitionDuration: Duration.zero,
+                            ),
+                          );
+                        }
+                        Navigator.of(context).pushReplacement(
+                          PageRouteBuilder(
+                            pageBuilder: (_, __, ___) =>
+                                HomePage(successMessage: message),
+                            transitionDuration: Duration.zero,
+                            reverseTransitionDuration: Duration.zero,
+                          ),
+                        );
+                      }
+                    } catch (error) {
+                      if (context.mounted) {
+                        AppFlushbar.error(context, error.toString());
+                      }
+                    }
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.black,
                     overlayColor: Colors.white,
