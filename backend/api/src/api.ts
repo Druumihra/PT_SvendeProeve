@@ -108,7 +108,7 @@ app.put('/edit/:id/user', auth, async (req: any, res: any) => {
   });
 
   await prisma.users.update({
-    where: { id: req.params.id },
+    where: { id: id },
     data: {
       username: req.body.username,
       profilePicture: imageblob,
@@ -157,7 +157,7 @@ app.post('/user/findUsers/:query', auth, async (req: any, res: any) => {
 app.get('/user/getUser/:id', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.id);
   let result = await prisma.users.findUnique({
-    where: { id: req.params.id },
+    where: { id: id },
   });
   res.status(200).json(result);
 });
@@ -228,6 +228,14 @@ app.post('/group/create', auth, async (req: any, res: any) => {
   }
 });
 
+app.get('/group/getgroups', auth, async (req: any, res: any) => {
+  await prisma.users.findUnique({
+    where: { id: req.body.userid },
+    select: {
+      groups: true,
+    },
+  });
+});
 app.get('/group/:groupId/getMembers', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
   const members = await prisma.groups.findUnique({
