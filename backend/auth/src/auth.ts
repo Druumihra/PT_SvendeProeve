@@ -26,14 +26,49 @@ var dynamicCorsOptions = function (req: any, callback: any) {
 app.use(cors(dynamicCorsOptions));
 app.use(express.urlencoded({ extended: true }));
 
-const createKeys = () => {
-  const { privateKey, publicKey } = nodeCrypto.generateKeyPairSync('rsa', {
-    modulusLength: 2048,
-  });
-  return { privateKey, publicKey };
+function readPrivateKey(filePath: string) {
+  return nodeCrypto.createPrivateKey(fs.readFileSync(filePath, 'utf8'));
+}
+
+function readPublicKey(filePath: string) {
+  return nodeCrypto.createPublicKey(fs.readFileSync(filePath, 'utf8'));
+}
+const test = () => {
+  try {
+    const privateKey = readPrivateKey('./private.pem');
+    const publicKey = readPublicKey('./public.pem');
+    return { privateKey, publicKey };
+  } catch (err) {
+    const { privateKey, publicKey } = nodeCrypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+    });
+    fs.writeFile(
+      'private.pem',
+      privateKey.export({ type: 'pkcs1', format: 'pem' }),
+      (err) => {
+        if (err) {
+          console.error('Error writing private key:', err);
+        } else {
+          console.log('Private key saved to private.pem');
+        }
+      },
+    );
+    fs.writeFile(
+      'public.pem',
+      publicKey.export({ type: 'spki', format: 'pem' }),
+      (err) => {
+        if (err) {
+          console.error('Error writing public key:', err);
+        } else {
+          console.log('Public key saved to public.pem');
+        }
+      },
+    );
+    return { privateKey, publicKey };
+  }
 };
 
-const { privateKey, publicKey } = createKeys();
+const { privateKey, publicKey } = test();
 
 const createJWT = (
   user: string,
@@ -50,45 +85,6 @@ const createJWT = (
   );
   return token;
 };
-
-fs.writeFile(
-  'private.pem',
-  privateKey.export({ type: 'pkcs1', format: 'pem' }),
-  (err) => {
-    if (err) {
-      console.error('Error writing private key:', err);
-    } else {
-      console.log('Private key saved to private.pem');
-    }
-  },
-);
-fs.writeFile(
-  'public.pem',
-  publicKey.export({ type: 'spki', format: 'pem' }),
-  (err) => {
-    if (err) {
-      console.error('Error writing public key:', err);
-    } else {
-      console.log('Public key saved to public.pem');
-    }
-  },
-);
-
-fs.readFile('private.pem', 'utf8', (err, data) => {
-  if (err) {
-    console.error('Error reading private key:', err);
-  } else {
-    console.log(data.toString());
-  }
-});
-
-fs.readFile('public.pem', 'utf8', (err, data) => {
-  if (err) {
-    console.error('Error reading public key:', err);
-  } else {
-    console.log(data.toString());
-  }
-});
 
 app.post('/login', async (req: any, res: any) => {
   if (!req.body.username || !req.body.password) {
