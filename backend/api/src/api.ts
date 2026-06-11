@@ -1,9 +1,6 @@
 import express from 'express';
-import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
-import { Blob } from 'buffer';
-import fs from 'node:fs';
 
 // import type {
 //   UsersModel as user,
@@ -92,7 +89,7 @@ async function auth(req: any, res: any, next: any) {
 async function isgroupadmin(groupId: number, userId: number) {
   let result = await prisma.groupAdmins.findFirst({
     where: {
-      groupId: groupId,
+      groupsId: groupId,
       usersId: userId,
     },
   });
@@ -142,7 +139,7 @@ app.delete('/auth/delete/:id/user', auth, async (req: any, res: any) => {
   }
 });
 
-app.post('/user/findUsers/:query', auth, async (req: any, res: any) => {
+app.get('/user/findUsers/:query', auth, async (req: any, res: any) => {
   let result = await prisma.users.findMany({
     where: {
       name: { contains: req.params.query },
@@ -193,7 +190,7 @@ app.delete('/user/removeFriend', auth, async (req: any, res: any) => {
   res.status(200).json('Friend removed.');
 });
 
-app.get('/user/getFriends', auth, async (req: any, res: any) => {
+app.post('/user/getFriends', auth, async (req: any, res: any) => {
   const friends = await prisma.users.findUnique({
     where: {
       id: req.body.id,
@@ -201,6 +198,7 @@ app.get('/user/getFriends', auth, async (req: any, res: any) => {
     },
     select: { name: true, id: true },
   });
+  res.status(200).json(friends);
 });
 
 app.post('/group/create', auth, async (req: any, res: any) => {
@@ -247,36 +245,46 @@ app.get('/group/:groupId/getMembers', auth, async (req: any, res: any) => {
 app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
-  if (!(await isgroupadmin(id, req.body.userId))) {
+  if (!(await isgroupadmin(id, req.body.adminId))) {
     res.status(401).json('Unauthorized');
   }
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
-  await prisma.groups.update({
+  console.log(req.body);
+  let result = await prisma.users.update({
     where: {
-      id: req.params.groupId,
+      id: req.body.userId,
     },
-    data: { members: req.body.userId },
+    data: {
+      groups: {
+        connect: {
+          usersId_groupsId: { usersId: req.body.userId, groupsId: id },
+        },
+      },
+    },
   });
-  res.status(200).json('success');
+  console.log(result);
+  res.status(200).json('successfully added user');
 });
-
-// make it request based like friends
 
 app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
-  if (!(await isgroupadmin(id, req.body.userId))) {
+  if (!(await isgroupadmin(id, req.body.adminId))) {
     res.status(401).json('Unauthorized');
   }
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
-  await prisma.groupAdmins.create({
+  await prisma.users.update({
+    where: { id: req.body.userId },
     data: {
-      admin: req.body.userId,
-      group: { connect: { id: id } },
+      admin: {
+        connect: {
+          usersId_groupsId: { usersId: req.body.userId, groupsId: id },
+        },
+      },
     },
   });
   res.status(200).json('success');
@@ -285,11 +293,21 @@ app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
 app.post('/group/:groupId/kickUser', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
-  if (!(await isgroupadmin(id, req.body.userId))) {
+  if (!(await isgroupadmin(id, req.body.adminId))) {
     res.status(401).json('Unauthorized');
   }
-  let result = await prisma.groups.delete({
-    where: { name: req.body.username, id: req.params.groupId },
+  let result = await prisma.users.update({
+    where: { id: req.body.usersid },
+    data: {
+      groups: {
+        disconnect: {
+          usersId_groupsId: {
+            usersId: req.body.usersid,
+            groupsId: id,
+          },
+        },
+      },
+    },
   });
   res.status(200).json(result);
 });
@@ -297,7 +315,7 @@ app.post('/group/:groupId/kickUser', auth, async (req: any, res: any) => {
 app.post('/group/:groupId/delete', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
-  if (!(await isgroupadmin(id, req.body.userId))) {
+  if (!(await isgroupadmin(id, req.body.adminId))) {
     res.status(401).json('Unauthorized');
   }
   if (!req.body) {
@@ -320,7 +338,9 @@ app.put('/group/:groupId/edit', auth, async (req: any, res: any) => {
     where: {
       id: id,
     },
-    data: req.body,
+    data: {
+      name: req.body.name,
+    },
   });
 });
 
@@ -333,24 +353,20 @@ app.post('/challenge/create', auth, async (req: any, res: any) => {
       name: req.body.challengeName,
       score: req.body.score,
       description: req.body.challengeDescription,
-      groupsId: req.body.groupId,
       active: true,
+      group: { connect: { id: req.body.groupId } },
     },
   });
+  res.status(200).json('Challenge created');
 });
 
 app.post('/challenges/:groupId/getAll', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
-  const challenges = await prisma.challenges.findMany({
+  const challenges = await prisma.groups.findUnique({
     where: {
-      groupsId: id,
+      name: req.body.name,
     },
-    select: {
-      name: true,
-      description: true,
-      id: true,
-      active: true,
-    },
+    include: { challenges: true },
   });
   res.json(challenges);
 });
@@ -438,20 +454,29 @@ app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
   }
 });
 
-// should return the points of all players in a challenge, ordered by score
-app.get(
-  '/challenge/:challengeId/scoreboard',
-  auth,
-  async (req: any, res: any) => {
-    let id: number = await parseInt(req.params.challengeId);
+// should return the points of all players in a challenge, ordered by score descending
+app.get('/challenge/:groupId/scoreboard', auth, async (req: any, res: any) => {
+  let id: number = await parseInt(req.params.groupId);
 
-    await prisma.challenges.findFirst({
-      where: { id: id },
-      include: { challengesResults: true },
-      orderBy: { challengesResults: score: 'desc' },
-    });
-  },
-);
+  let result = await prisma.groups.findFirst({
+    where: { id: id },
+    include: {
+      challenges: {
+        include: {
+          challengesResults: {
+            where: { validated: true },
+            select: { User: true, challengesId: true },
+          },
+        },
+      },
+    },
+  });
+  console.log(result);
+  // for each user it should tally the total score from the returned validated challenge completions
+
+  // should look something like {playerid: total score}
+  res.status(200).json(result);
+});
 
 //should get a players points for a specific challenge, for the current week, ordered by date
 app.get(
@@ -482,7 +507,20 @@ app.post(
   '/challenge/:challengeId/acceptsubmission',
   auth,
   async (req: any, res: any) => {
-    //should allow a group admin to accept result
+    let id: number = await parseInt(req.params.challengeId);
+
+    if (!(await isgroupadmin(id, req.body.adminId))) {
+      res.status(401).json('Unauthorized');
+    }
+    prisma.challengesResult.update({
+      where: {
+        usersId_challengesId: { usersId: req.body.usersId, challengesId: id },
+      },
+      data: {
+        validated: true,
+      },
+    });
+    res.status(200).json('Submission accepted');
   },
 );
 app.post(

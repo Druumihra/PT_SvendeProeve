@@ -12,12 +12,12 @@ model Users {
   name              String
   id                Int                @id @unique
   profilepicture    Bytes?
-  groups            Groups[]
   challengesResults ChallengesResult[]
-  admins            GroupAdmins[]
+  admin             GroupAdmins[]
   votes             votes[]
   friends           Friends[]          @relation(name: "user")
   friendof          Friends[]          @relation(name: "friendof")
+  groups            GroupMembers[]
 }
 
 model Friends {
@@ -29,20 +29,30 @@ model Friends {
 }
 
 model Groups {
-  id         Int           @id @default(autoincrement())
-  name       String        @unique
-  members    Users?        @relation(fields: [usersId], references: [id])
+  id         Int            @id @default(autoincrement())
+  name       String         @unique
   usersId    Int?
   admins     GroupAdmins[]
   challenges Challenges[]
+  members    GroupMembers[]
+}
+
+model GroupMembers {
+  member   Users  @relation(fields: [usersId], references: [id])
+  group    Groups @relation(fields: [groupsId], references: [id])
+  usersId  Int
+  groupsId Int
+
+  @@id([usersId, groupsId])
 }
 
 model GroupAdmins {
-  id       Int    @id @default(autoincrement())
   admin    Users  @relation(fields: [usersId], references: [id])
   group    Groups @relation(fields: [groupsId], references: [id])
   usersId  Int
   groupsId Int
+
+  @@id([usersId, groupsId])
 }
 
 model Challenges {
@@ -50,8 +60,8 @@ model Challenges {
   id                Int                @id @unique @default(autoincrement())
   description       String
   score             Int
-  group             Groups?            @relation(fields: [groupsId], references: [id])
-  groupsId          Int?
+  group             Groups             @relation(fields: [groupsId], references: [id])
+  groupsId          Int
   active            Boolean
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -75,5 +85,7 @@ model ChallengesResult {
   date         DateTime   @default(now())
   Challenge    Challenges @relation(fields: [challengesId], references: [id])
   usersId      Int
-  challengesId Int        @id
+  challengesId Int
+
+  @@id([usersId, challengesId])
 }
