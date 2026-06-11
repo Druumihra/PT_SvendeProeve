@@ -228,9 +228,10 @@ app.post('/group/create', auth, async (req: any, res: any) => {
   }
 });
 
-app.get('/group/getgroups', auth, async (req: any, res: any) => {
+app.get('/group/getgroups/:id', auth, async (req: any, res: any) => {
+  let id: number = await parseInt(req.params.id);
   await prisma.users.findUnique({
-    where: { id: req.body.userid },
+    where: { id: id },
     select: {
       groups: true,
     },
