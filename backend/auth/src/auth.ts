@@ -5,16 +5,25 @@ import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
 import fs from 'node:fs';
-import * as http from 'node:http';
 
 const app = express();
 app.use(express.json());
-app.use(
-  cors({
-    origin: `${process.env.API_URL}`,
-    credentials: true,
-  }),
-);
+var dynamicCorsOptions = function (req: any, callback: any) {
+  var corsOptions;
+  if (req.path.startsWith('/API/')) {
+    corsOptions = {
+      origin: `${process.env.API_URL}`,
+    };
+  } else {
+    corsOptions = {
+      origin: '*',
+      credentials: true,
+    };
+  }
+  callback(null, corsOptions);
+};
+
+app.use(cors(dynamicCorsOptions));
 app.use(express.urlencoded({ extended: true }));
 
 const createKeys = () => {
@@ -290,7 +299,7 @@ app.delete('/deleteUser', async (req: any, res: any) => {
   }
 });
 
-app.post('/verify', async (req: any, res: any) => {
+app.post('/API/verify', async (req: any, res: any) => {
   console.log(1);
   let result = await auth(req);
   if (!result.valid) {
@@ -300,9 +309,8 @@ app.post('/verify', async (req: any, res: any) => {
   }
 });
 
-
 // setup so it reads public key from file and then responds with it
-app.get('/getPublicKey', async (req: any, res: any) => {
+app.get('/API/getPublicKey', async (req: any, res: any) => {
   res
     .status(200)
     .json(publicKey.export({ type: 'spki', format: 'pem' }).toString());
