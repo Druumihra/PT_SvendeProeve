@@ -16,13 +16,16 @@ model Users {
   challengesResults ChallengesResult[]
   admins            GroupAdmins[]
   votes             votes[]
-  friends           Friends[]
+  friends           Friends[]          @relation(name: "user")
+  friendof          Friends[]          @relation(name: "friendof")
 }
 
 model Friends {
-  id       Int     @id @default(autoincrement())
-  User     Users[]
   accepted Boolean @default(false)
+  user     Users?  @relation(name: "user", fields: [usersId], references: [id])
+  usersId  Int     @id
+  friendof Users?  @relation(name: "friendof", fields: [friendid], references: [id])
+  friendid Int
 }
 
 model Groups {
@@ -65,10 +68,10 @@ model votes {
 }
 
 model ChallengesResult {
-  id           Int        @id @default(autoincrement())
   User         Users      @relation(fields: [usersId], references: [id])
-  Result       String
+  score        Int
+  date         DateTime   @default(now())
   Challenge    Challenges @relation(fields: [challengesId], references: [id])
   usersId      Int
-  challengesId Int
+  challengesId Int        @id
 }

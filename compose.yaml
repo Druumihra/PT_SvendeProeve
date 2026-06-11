@@ -36,7 +36,6 @@ services:
       # auth:
       #   condition: service_healthy
     ports:
-    ## need to change port
       - 4001:3050
     env_file:
       - api.env
@@ -62,7 +61,6 @@ services:
       database:
         condition: service_healthy
     ports:
-    ## need to change port
       - 4000:3000
     env_file:
       - auth.env

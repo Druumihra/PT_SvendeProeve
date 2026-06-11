@@ -13,19 +13,31 @@ import fs from 'node:fs';
 
 const app = express();
 app.use(express.json());
-app.use(
-  cors({
-    origin: '*',
-    credentials: true,
-  }),
-);
+
+var dynamicCorsOptions = function (req: any, callback: any) {
+  var corsOptions;
+  if (req.path.startsWith('/auth/')) {
+    corsOptions = {
+      origin: `${process.env.AUTH_URL}`,
+    };
+  } else {
+    corsOptions = {
+      origin: '*',
+      credentials: true,
+    };
+  }
+  callback(null, corsOptions);
+};
+
+app.use(cors(dynamicCorsOptions));
+
 app.use(express.urlencoded({ extended: true }));
 
-app.post('/createUser', async (req: any, res: any) => {
+app.post('/auth/createUser', async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Invalid request body.');
   } else {
-    await prisma.users.create({
+    let result = await prisma.users.create({
       data: {
         name: req.body.username,
         id: req.body.id,
@@ -35,18 +47,23 @@ app.post('/createUser', async (req: any, res: any) => {
   }
 });
 
-// apply auth to all routes below this middleware
+// let res = await fetch('http://localhost:3050/getPublicKey', {
+//   method: 'GET',
+//   headers: {
+//     'Content-Type': 'application/json',
+//   },
+// });
+
 async function auth(req: any, res: any, next: any) {
   if (!req.headers['cookie']) {
     res.status(401).json('Please log in');
   } else {
-    let token = req.headers['cookie'].split('session=')[1];
-    let response = await fetch('http://localhost:3050/verify', {
+    let response = await fetch(`${process.env.AUTH_URL}/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         include: 'credentials',
-        cookie: `session=${token}`,
+        cookie: req.headers['cookie'],
       },
     });
     if (!response.ok) {
@@ -70,13 +87,10 @@ async function isgroupadmin(groupId: number, userId: number) {
 }
 
 app.put('/edit/:id/user', auth, async (req: any, res: any) => {
-  if (req.body.profilePicture) {
-    const imageblob = new Blob([req.body.profilePicture], {
-      type: 'image/png',
-    });
-  } else {
-    const imageblob = undefined;
-  }
+  const imageblob = new Blob([req.body.profilePicture], {
+    type: 'image/png',
+  });
+
   await prisma.users.update({
     where: { id: req.params.id },
     data: {
@@ -84,7 +98,7 @@ app.put('/edit/:id/user', auth, async (req: any, res: any) => {
       profilePicture: imageblob,
     },
   });
-  // maybe add a fetch to update email and password in auth
+
   if (req.body.email || req.body.password) {
     let response = await fetch('http://localhost:3050/updateAuth', {
       method: 'PUT',
@@ -103,63 +117,69 @@ app.put('/edit/:id/user', auth, async (req: any, res: any) => {
   res.status(200).json('Success');
 });
 
-// gets called from auth api
-app.delete('/delete/:id/user', auth, async (req: any, res: any) => {
-  await prisma.users.delete({
-    where: { id: req.params.id },
-    // data: {
-    //   challengesresult: { deleteMany: { where: { userid: req.params.id } } },
-    //   disconnect: { challengesresult: true, groups: true },
-    // },
+app.delete('/auth/delete/:id/user', auth, async (req: any, res: any) => {
+  let id: number = await parseInt(req.params.id);
+  let result = await prisma.users.delete({
+    where: { id: id },
   });
+  if (result != null) {
+    res.status(200).json('Success');
+  } else {
+    res.status(500).json('error');
+  }
 });
 
-app.get('/user/findUsers', auth, async (req: any, res: any) => {
-  prisma.users.findMany({
+app.post('/user/findUsers/:query', auth, async (req: any, res: any) => {
+  let result = await prisma.users.findMany({
     where: {
-      name: { contains: req.body.username },
+      name: { contains: req.params.query },
     },
-  });
-});
-
-app.get('/user/getUser', auth, async (req: any, res: any) => {
-  let result = prisma.users.findMany({
-    where: { name: { contains: req.body.query } },
   });
   res.status(200).json(result);
 });
 
-//rewrite
+app.get('/user/getUser/:id', auth, async (req: any, res: any) => {
+  let result = await prisma.users.findUnique({
+    where: { id: req.params.id },
+  });
+  res.status(200).json(result);
+});
+
 app.post('/user/addFriend', auth, async (req: any, res: any) => {
-  prisma.friends.create({
+  prisma.users.update({
+    where: { id: req.body.userId },
     data: {
-      friendId: req.body.friendId,
-      connect: {
-        users: { id: req.body.userId },
+      friends: {
+        create: { friendid: req.body.friendId },
       },
     },
   });
+  res.status(200).json('Friend request sent.');
 });
 
 app.put('/user/acceptFriend', auth, async (req: any, res: any) => {
-  prisma.friends.update({
-    where: { friendId: req.body.friendId, usersId: req.body.userId },
+  prisma.users.update({
+    where: {
+      id: req.body.userId,
+      friends: { some: { friendid: req.body.friendId } },
+    },
     data: { accepted: true },
   });
+
+  res.status(200).json('Friend request accepted.');
 });
 
 app.delete('/user/removeFriend', auth, async (req: any, res: any) => {
   prisma.friends.delete({
-    where: { friendId: req.body.friendId, usersId: req.body.userId },
+    where: {
+      usersId: req.body.userId,
+      friendid: req.body.friendId,
+    },
   });
+  res.status(200).json('Friend removed.');
 });
 
 app.get('/user/getFriends', auth, async (req: any, res: any) => {
-  const friendids = await prisma.users.findMany({
-    where: { friends: { friendId: req.body.userId, accepted: true } },
-    select: { friends: true },
-  });
-  // probs wont work
   const friends = await prisma.users.findUnique({
     where: {
       id: req.body.id,
@@ -206,6 +226,7 @@ app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
+  //should use email rather than ID
   await prisma.groups.update({
     where: {
       id: req.params.groupId,
@@ -213,6 +234,8 @@ app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
     data: { members: req.body.userId },
   });
 });
+
+// make it request based like friends
 
 app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
   if (!(await isgroupadmin(req.params.groupId, req.body.userId))) {
@@ -350,7 +373,7 @@ app.post('/challenge/:challengeId/delete', auth, async (req: any, res: any) => {
 app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
   let result = await prisma.challengesResult.create({
     data: {
-      Result: req.body.result,
+      score: req.body.result,
       User: {
         connect: {
           id: req.body.userId,
@@ -370,30 +393,55 @@ app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
   }
 });
 
+// should return the points of all players in a challenge, ordered by score
 app.get(
-  '/challenge/:challengeId/getPlayerPoints',
+  '/challenge/:challengeId/scoreboard',
   auth,
   async (req: any, res: any) => {
     await prisma.challengesResult.findMany({
       where: { challengesId: req.params.challengeId },
+      orderBy: { score: 'desc' },
     });
   },
 );
-
-app.post('/challenge/:challengeId/createvote', auth, async (req: any, res: any) => {
-  //should allow a group admin to create a vote for a challenge
-  await prisma.challenges.update({
-    where: {
-      id: req.params.challengeId,
-    },
-    data: {
-      votes: {
-        create: [{ vote: req.body.vote }],
+//should get players points for a specific challenge, for the current week, ordered by date
+app.get(
+  '/challenge/:challengeId/getplayerpoints',
+  auth,
+  async (req: any, res: any) => {
+    let result = await prisma.challengesResult.findMany({
+      where: {
+        challengesId: req.params.challengeId,
+        usersId: req.body.userid,
       },
-    },
-  });
-  res.status(200).json('Vote sucessfully created.');
-});
+      select: { score: true, date: true },
+      orderBy: { date: 'desc' },
+    });
+
+    //should sanitize result so that its total score per day for the last week
+
+    res.status(200).json(result);
+  },
+);
+
+app.post(
+  '/challenge/:challengeId/createvote',
+  auth,
+  async (req: any, res: any) => {
+    //should allow a group admin to create a vote for a challenge
+    await prisma.challenges.update({
+      where: {
+        id: req.params.challengeId,
+      },
+      data: {
+        votes: {
+          create: [{ vote: req.body.vote }],
+        },
+      },
+    });
+    res.status(200).json('Vote sucessfully created.');
+  },
+);
 
 app.post('/challenge/:challengeId/vote', auth, async (req: any, res: any) => {
   if (req.body.vote.type) {

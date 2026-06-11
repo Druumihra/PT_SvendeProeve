@@ -5,12 +5,13 @@ import jwt from 'jsonwebtoken';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
 import fs from 'node:fs';
+import * as http from 'node:http';
 
 const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: 'http://localhost:3050',
+    origin: `${process.env.API_URL}`,
     credentials: true,
   }),
 );
@@ -64,12 +65,11 @@ fs.writeFile(
   },
 );
 
-//
 fs.readFile('private.pem', 'utf8', (err, data) => {
   if (err) {
     console.error('Error reading private key:', err);
   } else {
-    // console.log(data.toString());
+    console.log(data.toString());
   }
 });
 
@@ -77,7 +77,7 @@ fs.readFile('public.pem', 'utf8', (err, data) => {
   if (err) {
     console.error('Error reading public key:', err);
   } else {
-    // console.log(data.toString());
+    console.log(data.toString());
   }
 });
 
@@ -110,6 +110,7 @@ app.post('/login', async (req: any, res: any) => {
 });
 
 let auth = async (req: any) => {
+  console.log(req.headers);
   const token = req.headers['cookie'].split('session=')[1];
   let decoded = await jwt.verify(token, publicKey);
   if (typeof decoded == 'string') {
@@ -130,23 +131,26 @@ let auth = async (req: any) => {
 };
 
 app.post('/logout', async (req: any, res: any) => {
-  const token = req.headers['cookie'].split('session=')[1];
-  let result = await auth(token);
-  if (result.valid && result.data != null) {
-    prisma.sessions.delete({
-      where: { sessionId: result.data },
-    });
-
-    prisma.sessions.deleteMany({
-      where: {
-        createdAt: {
-          lt: Math.floor(Date.now() / (1000 * 60 * 60) - 2),
-        },
-      },
-    });
-    res.status(200).json('Success');
+  if (!req.headers['cookie']) {
+    res.status(400).json('Missing cookie');
   } else {
-    res.status(400).json('Unauthorized');
+    let result = await auth(req);
+    if (result.valid && result.data != null) {
+      prisma.sessions.delete({
+        where: { sessionId: result.data },
+      });
+
+      prisma.sessions.deleteMany({
+        where: {
+          createdAt: {
+            lt: Math.floor(Date.now() / (1000 * 60 * 60) - 2),
+          },
+        },
+      });
+      res.status(200).json('Success');
+    } else {
+      res.status(400).json('Unauthorized');
+    }
   }
 });
 
@@ -155,10 +159,10 @@ app.post('/createUser', async (req: any, res: any) => {
     return res.status(400).json('Please fill out all required fields.');
   }
 
-  const user = await prisma.users.findFirst({
+  const usercheck = await prisma.users.findFirst({
     where: { name: req.body.username, email: req.body.email },
   });
-  if (user) {
+  if (usercheck) {
     return res.status(400).json('User already exists.');
   }
 
@@ -172,44 +176,63 @@ app.post('/createUser', async (req: any, res: any) => {
     },
   });
 
-  let id = await prisma.users.findFirst({
+  let user = await prisma.users.findFirst({
     where: { name: req.body.username },
-    select: { id: true },
+    select: { id: true, name: true },
   });
-
-  let response = await fetch(`${process.env.API_BASE_URL}/createUser`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      username: req.body.username,
-      id: id?.id,
-    }),
-  });
-  if (!response.ok) {
-    return res
-      .status(500)
-      .json('An error occurred elsewhere while creating the user.');
+  if (user == null) {
+    res.status(500).json('User failed to create');
   } else {
-    res.status(200).json('Success');
+    try {
+      const response = await fetch(`${process.env.API_URL}/auth/createUser`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: user.name,
+          id: user.id,
+        }),
+      });
+      if (!response.ok) {
+        prisma.users.delete({
+          where: { id: user!.id },
+        });
+        return res
+          .status(500)
+          .json('An error occurred elsewhere while creating the user.');
+      } else {
+        res.status(200).json('Success');
+      }
+    } catch (error) {
+      let test = await prisma.users.delete({
+        where: { id: user.id },
+      });
+      console.log(error);
+      res.status(500).json(test);
+    }
   }
 });
 
 app.post('/edit/user/', async (req: any, res: any) => {
-  if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
-    res.status(401).json('Unauthorized');
+  if (!req.headers['cookie']) {
+    res.status(400).json('Missing cookie');
   } else {
-    await prisma.users.update({
-      where: { id: req.body.id },
-      data: {
-        password: bcrypt.hashSync(req.body.password, 10),
-        email: req.body.email,
-      },
-    });
-    return res.status(200).json('Success');
+    let result = await auth(req);
+    if (result.valid && result.data != null) {
+      res.status(401).json('Unauthorized');
+    } else {
+      await prisma.users.update({
+        where: { id: result.userId! },
+        data: {
+          password: bcrypt.hashSync(req.body.password, 10),
+          email: req.body.email,
+        },
+      });
+      return res.status(200).json('Success');
+    }
+    res.status(500).json('An error occurred while updating the user.');
   }
-  res.status(500).json('An error occurred while updating the user.');
 });
 
 // app.post('/edit/user/email', async (req: any, res: any) => {
@@ -228,27 +251,48 @@ app.post('/edit/user/', async (req: any, res: any) => {
 // });
 
 app.delete('/deleteUser', async (req: any, res: any) => {
-  if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
-    res.status(401).json('Unauthorized');
+  if (!req.headers['cookie']) {
+    res.status(400).json('Missing cookie');
   } else {
-    await prisma.users.delete({
-      where: { id: req.body.id },
-    });
-    console.log(process.env.API_URL);
-    fetch(`${process.env.API_URL}/delete/${req.body.id}/User`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-        cookie: req.headers['cookie'],
-      },
-      body: JSON.stringify({ id: req.body.id }),
-    });
+    let result = await auth(req);
+    if (result.valid && result.data != null) {
+      try {
+        console.log(result.userId);
+        let response = await fetch(
+          `${process.env.API_URL}/auth/delete/${result.userId}/User`,
+          {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              cookie: req.headers['cookie'],
+            },
+          },
+        );
+
+        if (!response.ok) {
+          res.status(500).json(`An error occured ${await response.json()}`);
+        } else {
+          let queryres = await prisma.users.delete({
+            where: { id: result.userId! },
+          });
+          if (queryres != null) {
+            res.status(200).json('User successfully deleted');
+          } else {
+            res.status(400).json('error');
+          }
+        }
+      } catch (err) {
+        console.log(err);
+      }
+    } else {
+      res.status(401).json('Unauthorized');
+    }
   }
 });
 
 app.post('/verify', async (req: any, res: any) => {
-  const token = req.headers['cookie'].split('session=')[1];
-  let result = await auth(token);
+  console.log(1);
+  let result = await auth(req);
   if (!result.valid) {
     return res.status(400).json('Unauthorized');
   } else {
@@ -256,6 +300,8 @@ app.post('/verify', async (req: any, res: any) => {
   }
 });
 
+
+// setup so it reads public key from file and then responds with it
 app.get('/getPublicKey', async (req: any, res: any) => {
   res
     .status(200)
