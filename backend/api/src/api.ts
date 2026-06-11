@@ -55,15 +55,29 @@ app.post('/auth/createUser', async (req: any, res: any) => {
 // });
 
 async function auth(req: any, res: any, next: any) {
-  if (!req.headers['cookie']) {
+  if (!req.headers['cookie'] || !req.headers['bearer']) {
     res.status(401).json('Please log in');
-  } else {
+  } else if (req.headers['cookie']) {
     let response = await fetch(`${process.env.AUTH_URL}/verify`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         include: 'credentials',
         cookie: req.headers['cookie'],
+      },
+    });
+    if (!response.ok) {
+      res.status(401).json('Unauthorized');
+    } else {
+      next();
+    }
+  } else if (req.headers['bearer']) {
+    let response = await fetch(`${process.env.AUTH_URL}/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        include: 'credentials',
+        cookie: req.headers['bearer'],
       },
     });
     if (!response.ok) {
@@ -197,7 +211,7 @@ app.post('/group/create', auth, async (req: any, res: any) => {
   let result = await prisma.groups.create({
     data: {
       name: req.body.groupName,
-      members: req.body.userId,
+      usersId: req.body.userId,
       admins: {
         create: { usersId: req.body.userId },
       },
