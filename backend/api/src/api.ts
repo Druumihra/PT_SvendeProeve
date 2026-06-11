@@ -56,7 +56,7 @@ app.post('/auth/createUser', async (req: any, res: any) => {
 
 async function auth(req: any, res: any, next: any) {
   // if (!req.headers['cookie'] || !req.headers['bearer']) {
-  //   res.status(401).json('Please log in');
+  //   res.status(400).json('Please log in');
   // } else if (req.headers['cookie']) {
   //   let response = await fetch(`${process.env.AUTH_URL}/verify`, {
   //     method: 'POST',
@@ -67,7 +67,7 @@ async function auth(req: any, res: any, next: any) {
   //     },
   //   });
   //   if (!response.ok) {
-  //     res.status(401).json('Unauthorized');
+  //     res.status(403).json('Unauthorized');
   //   } else {
   //     next();
   //   }
@@ -81,7 +81,7 @@ async function auth(req: any, res: any, next: any) {
   //     },
   //   });
   //   if (!response.ok) {
-  //     res.status(401).json('Unauthorized');
+  //     res.status(403).json('Unauthorized');
   //   } else {
   //     next();
   //   }
@@ -103,15 +103,12 @@ async function isgroupadmin(groupId: number, userId: number) {
 
 app.put('/edit/:id/user', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.id);
-  const imageblob = new Blob([req.body.profilePicture], {
-    type: 'image/png',
-  });
 
   await prisma.users.update({
     where: { id: id },
     data: {
       username: req.body.username,
-      profilePicture: imageblob,
+      profilePicture: req.body.picture,
     },
   });
 
@@ -230,12 +227,13 @@ app.post('/group/create', auth, async (req: any, res: any) => {
 
 app.get('/group/getgroups/:id', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.id);
-  await prisma.users.findUnique({
+  let result = await prisma.users.findUnique({
     where: { id: id },
     select: {
       groups: true,
     },
   });
+  res.status(200).json(result);
 });
 app.get('/group/:groupId/getMembers', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
@@ -255,13 +253,13 @@ app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
-  //should use email rather than ID
   await prisma.groups.update({
     where: {
       id: req.params.groupId,
     },
     data: { members: req.body.userId },
   });
+  res.status(200).json('success');
 });
 
 // make it request based like friends
@@ -281,6 +279,7 @@ app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
       group: { connect: { id: id } },
     },
   });
+  res.status(200).json('success');
 });
 
 app.post('/group/:groupId/kickUser', auth, async (req: any, res: any) => {
@@ -332,6 +331,7 @@ app.post('/challenge/create', auth, async (req: any, res: any) => {
   await prisma.challenges.create({
     data: {
       name: req.body.challengeName,
+      score: req.body.score,
       description: req.body.challengeDescription,
       groupsId: req.body.groupId,
       active: true,
@@ -374,6 +374,7 @@ app.put('/challenge/:challengeId/edit', auth, async (req: any, res: any) => {
           id: id,
         },
         data: {
+          score: req.body.score,
           name: req.body.challengeName,
           description: req.body.challengeDescription,
           groupsId: req.body.groupId,
@@ -417,7 +418,7 @@ app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
 
   let result = await prisma.challengesResult.create({
     data: {
-      score: req.body.result,
+      proof: req.body.image,
       User: {
         connect: {
           id: req.body.userId,
@@ -444,21 +445,28 @@ app.get(
   async (req: any, res: any) => {
     let id: number = await parseInt(req.params.challengeId);
 
-    await prisma.challengesResult.findMany({
-      where: { challengesId: id },
-      orderBy: { score: 'desc' },
+    await prisma.challenges.findFirst({
+      where: { id: id },
+      include: { challengesResults: true },
+      orderBy: { challengesResults: score: 'desc' },
     });
   },
 );
-//should get players points for a specific challenge, for the current week, ordered by date
+
+//should get a players points for a specific challenge, for the current week, ordered by date
 app.get(
   '/challenge/:challengeId/getplayerpoints',
   auth,
   async (req: any, res: any) => {
     let id: number = await parseInt(req.params.challengeId);
-
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     let result = await prisma.challengesResult.findMany({
+      take: 7,
       where: {
+        date: {
+          gte: oneWeekAgo,
+        },
         challengesId: id,
         usersId: req.body.userid,
       },
@@ -466,12 +474,17 @@ app.get(
       orderBy: { date: 'desc' },
     });
 
-    //should sanitize result so that its total score per day for the last week
-
     res.status(200).json(result);
   },
 );
 
+app.post(
+  '/challenge/:challengeId/acceptsubmission',
+  auth,
+  async (req: any, res: any) => {
+    //should allow a group admin to accept result
+  },
+);
 app.post(
   '/challenge/:challengeId/createvote',
   auth,

@@ -11,7 +11,7 @@ datasource db {
 model Users {
   name              String
   id                Int                @id @unique
-  profilepicture    String             @default("https://www.pngall.com/wp-content/uploads/5/Profile-PNG-High-Quality-Image.png")
+  profilepicture    Bytes?
   groups            Groups[]
   challengesResults ChallengesResult[]
   admins            GroupAdmins[]
@@ -49,6 +49,7 @@ model Challenges {
   name              String
   id                Int                @id @unique @default(autoincrement())
   description       String
+  score             Int
   group             Groups?            @relation(fields: [groupsId], references: [id])
   groupsId          Int?
   active            Boolean
@@ -69,7 +70,8 @@ model votes {
 
 model ChallengesResult {
   User         Users      @relation(fields: [usersId], references: [id])
-  score        Int
+  proof        Bytes
+  validated    Boolean    @default(false)
   date         DateTime   @default(now())
   Challenge    Challenges @relation(fields: [challengesId], references: [id])
   usersId      Int

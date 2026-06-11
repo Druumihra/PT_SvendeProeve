@@ -154,7 +154,7 @@ app.post('/logout', async (req: any, res: any) => {
       });
       res.status(200).json('Success');
     } else {
-      res.status(400).json('Unauthorized');
+      res.status(403).json('Unauthorized');
     }
   }
 });
@@ -207,7 +207,7 @@ app.post('/createUser', async (req: any, res: any) => {
           .status(500)
           .json('An error occurred elsewhere while creating the user.');
       } else {
-        res.status(200).json('Success');
+        res.status(201).json('Success');
       }
     } catch (error) {
       let test = await prisma.users.delete({
