@@ -12,12 +12,12 @@ var dynamicCorsOptions = function (req: any, callback: any) {
   var corsOptions;
   if (req.path.startsWith('/API/')) {
     corsOptions = {
-      origin: `${process.env.API_URL}`,
+      origin: '*',
+      // `${process.env.API_URL}`,
     };
   } else {
     corsOptions = {
       origin: '*',
-      credentials: true,
     };
   }
   callback(null, corsOptions);
@@ -115,47 +115,63 @@ app.post('/login', async (req: any, res: any) => {
 });
 
 let auth = async (req: any) => {
-  console.log(req.headers);
-  const token = req.headers['cookie'].split('session=')[1];
-  let decoded = await jwt.verify(token, publicKey);
-  if (typeof decoded == 'string') {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
     return { valid: false, data: null };
-  } else {
-    let result = await prisma.sessions.findFirst({
-      where: {
-        userId: decoded.id,
-        sessionId: decoded.data.session,
-      },
-    });
-    if (result != null) {
-      return { valid: true, data: result.sessionId, userId: result.userId };
-    } else {
-      return { valid: false, data: null };
-    }
   }
+  const token = authHeader.split(' ')[1]; // "Bearer <token>"
+
+  if (!token) {
+    return { valid: false, data: null };
+  }
+
+  let decoded: any;
+
+  try {
+    decoded = await jwt.verify(token, publicKey);
+  } catch (err) {
+    return { valid: false, data: null };
+  }
+
+  if (typeof decoded === 'string') {
+    return { valid: false, data: null };
+  }
+
+  const result = await prisma.sessions.findFirst({
+    where: {
+      userId: decoded.data.id,
+      sessionId: decoded.data.session,
+    },
+  });
+  if (result != null) {
+    return {
+      valid: true,
+      data: result.sessionId,
+      userId: result.userId,
+    };
+  }
+
+  return { valid: false, data: null };
 };
 
 app.post('/logout', async (req: any, res: any) => {
-  if (!req.headers['cookie']) {
-    res.status(400).json('Missing cookie');
-  } else {
-    let result = await auth(req);
-    if (result.valid && result.data != null) {
-      prisma.sessions.delete({
-        where: { sessionId: result.data },
-      });
+  let result = await auth(req);
+  if (result.valid && result.data != null) {
+    await prisma.sessions.delete({
+      where: { sessionId: result.data },
+    });
 
-      prisma.sessions.deleteMany({
-        where: {
-          createdAt: {
-            lt: Math.floor(Date.now() / (1000 * 60 * 60) - 2),
-          },
+    prisma.sessions.deleteMany({
+      where: {
+        createdAt: {
+          lt: Math.floor(Date.now() / (1000 * 60 * 60) - 2),
         },
-      });
-      res.status(200).json('Success');
-    } else {
-      res.status(403).json('Unauthorized');
-    }
+      },
+    });
+    res.status(200).json('Success');
+  } else {
+    res.status(403).json('Unauthorized');
   }
 });
 
@@ -220,25 +236,21 @@ app.post('/createUser', async (req: any, res: any) => {
 });
 
 app.put('/edit/user/', async (req: any, res: any) => {
-  if (!req.headers['cookie']) {
-    res.status(400).json('Missing cookie');
+  let result = await auth(req);
+  if (!result.valid && result.data != null) {
+    res.status(401).json('Unauthorized');
   } else {
-    let result = await auth(req);
-    if (result.valid && result.data != null) {
-      res.status(401).json('Unauthorized');
-    } else {
-      await prisma.users.update({
-        where: { id: result.userId! },
-        data: {
-          name: req.body.username,
-          password: bcrypt.hashSync(req.body.password, 10),
-          email: req.body.email,
-        },
-      });
-      return res.status(200).json('Success');
-    }
-    res.status(500).json('An error occurred while updating the user.');
+    await prisma.users.update({
+      where: { id: result.userId! },
+      data: {
+        name: req.body.username,
+        password: bcrypt.hashSync(req.body.password, 10),
+        email: req.body.email,
+      },
+    });
+    res.status(200).json('Success');
   }
+  res.status(500).json('An error occurred while updating the user.');
 });
 
 app.delete('/deleteUser', async (req: any, res: any) => {
@@ -248,7 +260,6 @@ app.delete('/deleteUser', async (req: any, res: any) => {
     let result = await auth(req);
     if (result.valid && result.data != null) {
       try {
-        console.log(result.userId);
         let response = await fetch(
           `${process.env.API_URL}/auth/delete/${result.userId}/User`,
           {
@@ -282,13 +293,12 @@ app.delete('/deleteUser', async (req: any, res: any) => {
 });
 
 app.post('/API/verify', async (req: any, res: any) => {
-  console.log(1);
   let result = await auth(req);
+
   if (!result.valid) {
-    return res.status(400).json('Unauthorized');
-  } else {
-    res.status(200).json('Authorized');
+    res.status(400).json('Unauthorized');
   }
+  res.status(200).json('Authorized');
 });
 
 // setup so it reads public key from file and then responds with it

@@ -1,14 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
-import { connect } from 'node:http2';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
-
-// import type {
-//   UsersModel as user,
-//   GroupsModel as group,
-//   ChallengesModel as challenge,
-// } from '../generated/prisma/models';
+import test from 'node:test';
 
 const app = express();
 app.use(express.json());
@@ -54,38 +48,33 @@ app.post('/auth/createUser', async (req: any, res: any) => {
 // });
 
 async function auth(req: any, res: any, next: any) {
-  // if (!req.headers['cookie'] || !req.headers['bearer']) {
-  //   res.status(400).json('Please log in');
-  // } else if (req.headers['cookie']) {
-  //   let response = await fetch(`${process.env.AUTH_URL}/verify`, {
-  //     method: 'POST',
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //       include: 'credentials',
-  //       cookie: req.headers['cookie],'
-  //     },
-  //   });
-  //   if (!response.ok) {
-  //     res.status(403).json('Unauthorized');
-  //   } else {
-  //     next();
-  //   }
-  // } else if (req.headers['bearer']) {
-  //   let response = await fetch(`${process.env.AUTH_URL}/verify`, {
-  //     method: 'POST',
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //       include: 'credentials',
-  //       cookie: req.headers['bearer'],
-  //     },
-  //   });
-  //   if (!response.ok) {
-  //     res.status(403).json('Unauthorized');
-  //   } else {
-  //     next();
-  //   }
-  // }
-  next();
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader) {
+    return res.status(400).json('Please log in');
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(400).json('Please log in');
+  }
+  try {
+    const response = await fetch(`${process.env.AUTH_URL}/API/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      return res.status(403).json('Unauthorized');
+    } else {
+      next();
+    }
+  } catch (err) {
+    return res.status(500).json('Auth service error');
+  }
 }
 
 async function isgroupadmin(groupId: number, userId: number) {
@@ -118,7 +107,7 @@ app.put('/edit/:id/user', auth, async (req: any, res: any) => {
         headers: {
           'Content-Type': 'application/json',
           include: 'credentials',
-          cookie: req.headers['cookie'],
+          Authorization: req.headers['cookie'],
         },
         body: JSON.stringify({
           username: req.body.username,
@@ -133,7 +122,6 @@ app.put('/edit/:id/user', auth, async (req: any, res: any) => {
     res.status(200).json('Success');
   } catch (e) {
     if (e instanceof PrismaClientKnownRequestError) {
-      console.log(e);
 
       res.status(500).json('internal error');
     }
@@ -191,7 +179,6 @@ app.post('/user/addFriend', auth, async (req: any, res: any) => {
         },
       },
     });
-    console.log(result);
     res.status(200).json('Friend request sent.');
   } catch (e) {
     if (e instanceof PrismaClientKnownRequestError) {
@@ -224,7 +211,6 @@ app.put('/user/acceptFriend', auth, async (req: any, res: any) => {
     },
   });
 
-  console.log(result);
   res.status(200).json('Friend request accepted.');
 });
 
@@ -245,10 +231,8 @@ app.delete('/user/removeFriend', auth, async (req: any, res: any) => {
         },
       },
     });
-    console.log(result);
     res.status(200).json('Friend removed.');
   } catch (e) {
-    console.log(e);
     res.status(500).json(e);
   }
 });
@@ -289,7 +273,7 @@ app.post('/user/getFriends', auth, async (req: any, res: any) => {
   }
 });
 
-app.post('/group/create', auth, async (req: any, res: any) => {
+app.post('/group/create', await auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
@@ -368,7 +352,6 @@ app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
       },
     },
   });
-  console.log(result);
   res.status(200).json('successfully added user');
 });
 
@@ -393,7 +376,6 @@ app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
       },
     },
   });
-  console.log(result);
   res.status(200).json('success');
 });
 
@@ -536,7 +518,6 @@ app.delete(
         id: id,
       },
     });
-    console.log(result);
     res.status(200).json('Challenge deleted');
   },
 );
@@ -653,7 +634,6 @@ app.post(
           validated: true,
         },
       });
-      console.log(result);
       res.status(200).json('Submission accepted');
     }
   },
