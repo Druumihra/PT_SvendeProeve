@@ -1,0 +1,92 @@
+//API
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Users {
+  name              String
+  id                Int                @id @unique
+  profilepicture    Bytes?
+  challengesResults ChallengesResult[]
+  admin             GroupAdmins[]
+  votes             votes[]
+  friends           Friends[]          @relation(name: "user")
+  friendof          Friends[]          @relation(name: "friendof")
+  groups            GroupMembers[]
+}
+
+model Friends {
+  accepted Boolean @default(false)
+  user     Users?  @relation(name: "user", fields: [usersId], references: [id], onDelete: Cascade)
+  friendof Users?  @relation(name: "friendof", fields: [friendid], references: [id], onDelete: Cascade)
+  usersId  Int
+  friendid Int
+
+  @@id([usersId, friendid])
+}
+
+model Groups {
+  id         Int            @id @default(autoincrement())
+  name       String         @unique
+  admins     GroupAdmins[]
+  challenges Challenges[]
+  members    GroupMembers[]
+}
+
+model GroupMembers {
+  member   Users  @relation(fields: [usersId], references: [id], onDelete: Cascade)
+  group    Groups @relation(fields: [groupsId], references: [id], onDelete: Cascade)
+  usersId  Int
+  groupsId Int
+
+  @@id([usersId, groupsId])
+}
+
+model GroupAdmins {
+  admin    Users  @relation(fields: [usersId], references: [id], onDelete: Cascade)
+  group    Groups @relation(fields: [groupsId], references: [id], onDelete: Cascade)
+  usersId  Int
+  groupsId Int
+
+  @@id([usersId, groupsId])
+}
+
+model Challenges {
+  name              String
+  id                Int                @id @unique @default(autoincrement())
+  description       String
+  score             Int
+  group             Groups             @relation(fields: [groupsId], references: [id], onDelete: Cascade)
+  groupsId          Int
+  active            Boolean
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  challengesResults ChallengesResult[]
+  votes             votes[]
+}
+
+model votes {
+  id           Int        @id @default(autoincrement())
+  User         Users?     @relation(fields: [usersId], references: [id])
+  Challenge    Challenges @relation(fields: [challengesId], references: [id], onDelete: Cascade)
+  usersId      Int?
+  challengesId Int
+  vote         Boolean?
+}
+
+model ChallengesResult {
+  User         Users      @relation(fields: [usersId], references: [id], onDelete: Cascade)
+  proof        Bytes
+  validated    Boolean    @default(false)
+  date         DateTime   @default(now())
+  Challenge    Challenges @relation(fields: [challengesId], references: [id], onDelete: Cascade)
+  usersId      Int
+  challengesId Int
+
+  @@id([usersId, challengesId])
+}
