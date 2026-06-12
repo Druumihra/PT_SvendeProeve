@@ -45,8 +45,14 @@ class _ChallengeSnapshot {
       if (decoded is Map<String, dynamic>) {
         final rawDates = decoded['completedDates'];
         return _ChallengeSnapshot(
-          title: decoded['title']?.toString() ?? 'Untitled challenge',
-          points: int.tryParse(decoded['points']?.toString() ?? '') ?? 0,
+          title:
+              (decoded['title'] ?? decoded['name'])?.toString() ??
+              'Untitled challenge',
+          points:
+              int.tryParse(
+                (decoded['points'] ?? decoded['score'])?.toString() ?? '',
+              ) ??
+              0,
           completedDates: rawDates is List
               ? rawDates.map((date) => date.toString()).toSet()
               : <String>{},
@@ -104,14 +110,41 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      final List<dynamic> rawGroups = await Client.myGroups(token!["id"]);
+      final dynamic rawResponse = await Client.myGroups(token!["id"]);
 
-      final List<String> parsedNames = rawGroups
-          .map((group) => group['name']?.toString() ?? '')
-          .where((name) => name.isNotEmpty)
-          .toList();
-
+      final List<dynamic> rawGroups = rawResponse is List
+          ? rawResponse
+          : [rawResponse];
+      final List<String> parsedNames = [];
       final prefs = await SharedPreferences.getInstance();
+
+      for (var item in rawGroups) {
+        if (item == null) continue;
+
+        final Map<String, dynamic> groupData =
+            item['group'] is Map<String, dynamic>
+            ? item['group']
+            : (item is Map<String, dynamic> ? item : {});
+
+        final String name = groupData['name']?.toString() ?? '';
+
+        if (name.isNotEmpty) {
+          parsedNames.add(name);
+
+          if (groupData['challenges'] is List) {
+            final List<dynamic> backendChallenges = groupData['challenges'];
+            final List<String> serializedChallenges = backendChallenges
+                .map((challenge) => jsonEncode(challenge))
+                .toList();
+
+            final key = _sanitizeKey(name);
+            await prefs.setStringList(
+              '$_challengesPrefix$key',
+              serializedChallenges,
+            );
+          }
+        }
+      }
 
       await prefs.setStringList(_myGroupsStorageKey, parsedNames);
 
@@ -123,6 +156,7 @@ class _HomePageState extends State<HomePage> {
 
       await _loadHomeData();
     } catch (e) {
+      debugPrint("Error parsing backend groups payload: $e");
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -290,6 +324,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _showGroupSelectionDialog() async {
     final groups = _myGroups;
+    debugPrint("2" + groups.toString());
 
     if (!mounted) {
       return;
@@ -738,7 +773,7 @@ class _HomePageState extends State<HomePage> {
                                 Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    'Users in this group',
+                                    'Deserting users in this group',
                                     style: Theme.of(
                                       context,
                                     ).textTheme.titleSmall,

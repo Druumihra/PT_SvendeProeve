@@ -127,24 +127,23 @@ class VoteEntry {
 
 class GroupDetailPage extends StatefulWidget {
   final String groupName;
-  const GroupDetailPage({super.key, required this.groupName});
+  final int groupId;
+  const GroupDetailPage({
+    super.key,
+    required this.groupName,
+    required this.groupId,
+  });
 
   @override
   State<GroupDetailPage> createState() => _GroupDetailPageState();
 }
 
 class _GroupDetailPageState extends State<GroupDetailPage> {
-  static const String _challengesPrefix = 'challenges_';
-  static const String _pointsPrefix = 'challenge_points_';
-  static const String _membersPrefix = 'group_members_';
-  static const String _userPointsPrefix = 'user_points_';
-  static const String _votesPrefix = 'votes_';
-
   int _selectedIndex = 1;
   bool _isLoading = true;
   int _groupPoints = 0;
   List<ChallengeEntry> _challenges = [];
-  List<String> _members = [];
+  List<dynamic> _members = [];
   List<VoteEntry> _votes = [];
 
   void _setSelectedIndex(int index) {
@@ -197,25 +196,18 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     await prefs.setString(_selectedGroupStorageKey, widget.groupName);
   }
 
-  String _challengesKey() =>
-      '$_challengesPrefix${_sanitizeKey(widget.groupName)}';
-
-  String _pointsKey() => '$_pointsPrefix${_sanitizeKey(widget.groupName)}';
-
-  String _membersKey() => '$_membersPrefix${_sanitizeKey(widget.groupName)}';
-
-  String _votesKey() => '$_votesPrefix${_sanitizeKey(widget.groupName)}';
-
-  String _userPointsKey() =>
-      '$_userPointsPrefix${_sanitizeKey(widget.groupName)}';
-
   String _currentMemberLabel() {
     final user = FirebaseAuth.instance.currentUser;
     return user?.displayName ?? 'You';
   }
 
   List<String> _voteParticipants() {
-    final participants = <String>{..._members, _currentMemberLabel()};
+    final memberNames = _members.map((m) {
+      final memberData = m['member'] as Map<String, dynamic>?;
+      return memberData?['name']?.toString() ?? 'Unknown';
+    }).toList();
+
+    final participants = <String>{...memberNames, _currentMemberLabel()};
     final ordered = participants.toList();
     ordered.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return ordered;
@@ -239,36 +231,55 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
   }
 
   Future<void> _loadGroupData() async {
-    final prefs = await SharedPreferences.getInstance();
-    final challenges = prefs.getStringList(_challengesKey()) ?? [];
-    final points = prefs.getInt(_pointsKey()) ?? 0;
-    final members = prefs.getStringList(_membersKey()) ?? [];
-    final votes = prefs.getStringList(_votesKey()) ?? [];
-    if (!mounted) return;
-    setState(() {
-      _challenges = challenges.map(ChallengeEntry.fromStoredValue).toList();
-      _votes = votes.map(VoteEntry.fromStoredValue).toList();
-      _groupPoints = points;
-      _members = members;
-      _isLoading = false;
-    });
+    setState(() => _isLoading = true);
+    try {
+      final members = await Client.getGroupMembers(widget.groupId);
+
+      final String rawChallengesString = await Client().getChallengesFromGroup(
+        widget.groupId,
+      );
+
+      List<ChallengeEntry> parsedChallenges = [];
+
+      try {
+        final decodedBody = jsonDecode(rawChallengesString);
+        List<dynamic> rawList = [];
+
+        if (decodedBody is Map && decodedBody['challenges'] is List) {
+          rawList = decodedBody['challenges'];
+        }
+
+        parsedChallenges = rawList.map((item) {
+          final normalizedItem = {
+            ...item,
+            'title': item['name'],
+            'points': item['score'],
+          };
+
+          return ChallengeEntry.fromStoredValue(jsonEncode(normalizedItem));
+        }).toList();
+      } catch (parseError) {
+        debugPrint("Error formatting challenge items: $parseError");
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _members = members;
+        _challenges = parsedChallenges;
+        _isLoading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      AppFlushbar.error(context, 'Failed to sync group data: $error');
+    }
   }
 
   Future<void> _addChallenge(String title, int points) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_challengesKey()) ?? [];
-    final entry = ChallengeEntry(title: title, points: points);
-    list.insert(0, entry.toStoredValue());
-    await prefs.setStringList(_challengesKey(), list);
     await _loadGroupData();
   }
 
   Future<void> _addVote(String title) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_votesKey()) ?? [];
-    final entry = VoteEntry(title: title, suggestedBy: _currentMemberLabel());
-    list.insert(0, entry.toStoredValue());
-    await prefs.setStringList(_votesKey(), list);
     await _loadGroupData();
   }
 
@@ -285,10 +296,6 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
       votesByMember: updatedVotes,
     );
 
-    final list = prefs.getStringList(_votesKey()) ?? [];
-    if (index < 0 || index >= list.length) return;
-    list[index] = updated.toStoredValue();
-    await prefs.setStringList(_votesKey(), list);
     await _loadGroupData();
   }
 
@@ -336,18 +343,6 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     }
   }
 
-  Future<void> _updateChallengeAt(int index, ChallengeEntry challenge) async {
-    final prefs = await SharedPreferences.getInstance();
-    final list = prefs.getStringList(_challengesKey()) ?? [];
-    if (index < 0 || index >= list.length) {
-      return;
-    }
-
-    list[index] = challenge.toStoredValue();
-    await prefs.setStringList(_challengesKey(), list);
-    await _loadGroupData();
-  }
-
   Future<void> _submitChallenge(int index) async {
     if (index < 0 || index >= _challenges.length) {
       return;
@@ -372,20 +367,6 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
 
     final updatedChallenges = List<ChallengeEntry>.from(_challenges);
     updatedChallenges[index] = updatedChallenge;
-
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.setStringList(
-      _challengesKey(),
-      updatedChallenges.map((entry) => entry.toStoredValue()).toList(),
-    );
-    await prefs.setInt(_pointsKey(), _groupPoints + challenge.points);
-
-    final userPoints = _readUserPoints(prefs.getString(_userPointsKey()));
-    final updatedUserPoints = <String, int>{...userPoints};
-    updatedUserPoints['You'] =
-        (updatedUserPoints['You'] ?? 0) + challenge.points;
-    await prefs.setString(_userPointsKey(), jsonEncode(updatedUserPoints));
 
     await _loadGroupData();
 
@@ -460,106 +441,262 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
         points: int.parse(pointsController.text.trim()),
         completedDates: challenge.completedDates,
       );
-      await _updateChallengeAt(index, updatedChallenge);
     }
   }
 
   Future<void> _showMembersDialog() async {
-    final emailController = TextEditingController();
+    final Future<List<dynamic>> friendsFuture = Client.getFriends(token?["id"]);
+    final Set<String> checkedUserIds = {};
 
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        List<String> dialogMembers = List<String>.from(_members);
+        List<dynamic> dialogMembers = List<dynamic>.from(_members);
 
         Future<void> saveMembers() async {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setStringList(_membersKey(), dialogMembers);
           await _loadGroupData();
         }
 
-        void addMember(void Function(void Function()) setDialogState) {
-          final email = emailController.text.trim();
-          if (email.isEmpty || !email.contains('@')) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Please enter a valid email address'),
-              ),
-            );
+        Future<void> inviteCheckedMembers(
+          void Function(void Function()) setDialogState,
+        ) async {
+          if (checkedUserIds.isEmpty) {
+            if (context.mounted) {
+              AppFlushbar.error(
+                context,
+                'Please check at least one friend to invite.',
+              );
+            }
             return;
           }
+          try {
+            for (String userId in checkedUserIds) {
+              final int? parsedUserId = int.tryParse(userId);
+              final message = await Client().inviteUserToGroup(
+                token?["id"],
+                parsedUserId!,
+                widget.groupId,
+              );
+              debugPrint('Invite response for user $userId: $message');
+              if (context.mounted) {
+                AppFlushbar.success(context, message);
+              }
+            }
 
-          if (dialogMembers.contains(email)) {
-            emailController.clear();
-            return;
+            setDialogState(() {
+              checkedUserIds.clear();
+            });
+
+            await saveMembers();
+          } catch (error) {
+            if (context.mounted) {
+              AppFlushbar.error(context, error.toString());
+            }
           }
-
-          dialogMembers = [...dialogMembers, email];
-          emailController.clear();
-          setDialogState(() {});
-          saveMembers();
         }
 
         return StatefulBuilder(
           builder: (context, setDialogState) => AlertDialog(
             backgroundColor: Colors.white,
-            title: const Text('Group users'),
+            title: const Text(
+              'Group Management',
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             content: SizedBox(
               width: 360,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: emailController,
-                    decoration: const InputDecoration(
-                      hintText: 'Invite user by email',
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Select friends to invite',
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
-                    cursorColor: Colors.black,
-                    style: const TextStyle(color: Colors.black),
-                    onSubmitted: (_) => addMember(setDialogState),
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      dialogMembers.isEmpty
-                          ? 'No users in this group yet.'
-                          : 'Current users',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 220,
-                    child: dialogMembers.isEmpty
-                        ? const Center(child: Text('Invite someone to start.'))
-                        : ListView.separated(
-                            itemCount: dialogMembers.length,
-                            separatorBuilder: (_, __) =>
-                                const Divider(height: 12),
-                            itemBuilder: (_, memberIndex) {
-                              final member = dialogMembers[memberIndex];
-                              return Row(
-                                children: [
-                                  Expanded(child: Text(member)),
-                                  IconButton(
-                                    onPressed: () {
-                                      dialogMembers = [...dialogMembers]
-                                        ..removeAt(memberIndex);
-                                      setDialogState(() {});
-                                      saveMembers();
-                                    },
-                                    icon: const Icon(
-                                      Icons.remove_circle,
-                                      color: Colors.black,
-                                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 150,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: FutureBuilder<List<dynamic>>(
+                        future: friendsFuture,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.black,
+                              ),
+                            );
+                          }
+                          if (snapshot.hasError ||
+                              !snapshot.hasData ||
+                              snapshot.data!.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'No friends found.',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            );
+                          }
+
+                          final allFriends = snapshot.data!;
+
+                          final Set<String> currentMemberIds = _members.map((
+                            m,
+                          ) {
+                            final memberData =
+                                m['member'] as Map<String, dynamic>?;
+                            return memberData?['id']?.toString() ?? '';
+                          }).toSet();
+
+                          final inviteableFriends = allFriends.where((friend) {
+                            final friendData =
+                                friend['friendof'] as Map<String, dynamic>?;
+                            final String friendId =
+                                friendData?['id']?.toString() ?? '';
+                            return !currentMemberIds.contains(friendId);
+                          }).toList();
+
+                          if (inviteableFriends.isEmpty) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: Text(
+                                  'All your friends are already in this group!',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: Colors.black54,
+                                    fontSize: 13,
                                   ),
-                                ],
+                                ),
+                              ),
+                            );
+                          }
+
+                          return ListView.builder(
+                            itemCount: inviteableFriends.length,
+                            itemBuilder: (context, index) {
+                              final friend = inviteableFriends[index];
+                              final String friendId = friend['friendof']!['id']
+                                  .toString();
+                              final String friendName =
+                                  friend['friendof']!['name'].toString();
+                              final isChecked = checkedUserIds.contains(
+                                friendId,
+                              );
+
+                              return CheckboxListTile(
+                                title: Text(
+                                  friendName,
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                value: isChecked,
+                                activeColor: Colors.black,
+                                checkColor: Colors.white,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                dense: true,
+                                onChanged: (bool? value) {
+                                  setDialogState(() {
+                                    if (value == true) {
+                                      checkedUserIds.add(friendId);
+                                    } else {
+                                      checkedUserIds.remove(friendId);
+                                    }
+                                  });
+                                },
                               );
                             },
-                          ),
-                  ),
-                ],
+                          );
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    Text(
+                      dialogMembers.isEmpty
+                          ? 'No users in this group yet.'
+                          : 'Current Members',
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 150,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.black12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: dialogMembers.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Group is currently empty.',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 4,
+                              ),
+                              itemCount: dialogMembers.length,
+                              separatorBuilder: (_, __) => const Divider(
+                                height: 1,
+                                color: Colors.black12,
+                              ),
+                              itemBuilder: (_, memberIndex) {
+                                final memberItem = dialogMembers[memberIndex];
+                                final memberData =
+                                    memberItem['member']
+                                        as Map<String, dynamic>?;
+                                final String memberName =
+                                    memberData?['name']?.toString() ??
+                                    'Unknown';
+                                return Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        memberName,
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      onPressed: () {
+                                        dialogMembers = [...dialogMembers]
+                                          ..removeAt(memberIndex);
+                                        setDialogState(() {});
+                                        saveMembers();
+                                      },
+                                      icon: const Icon(
+                                        Icons.remove_circle,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -569,12 +706,12 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 child: const Text('Close'),
               ),
               ElevatedButton(
-                onPressed: () => addMember(setDialogState),
+                onPressed: () => inviteCheckedMembers(setDialogState),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   foregroundColor: Colors.white,
                 ),
-                child: const Text('Invite'),
+                child: const Text('Invite checked'),
               ),
             ],
           ),
@@ -682,6 +819,100 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
     );
   }
 
+  Widget _buildChallengesSection() {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: CircularProgressIndicator(color: Colors.black),
+        ),
+      );
+    }
+
+    if (_challenges.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.black12),
+        ),
+        child: const Text('No active challenges.'),
+      );
+    }
+
+    final today = _todayKey();
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _challenges.length,
+      itemBuilder: (context, index) {
+        final challenge = _challenges[index];
+        final bool isCompletedToday = challenge.completedOn(today);
+
+        return Card(
+          color: Colors.white,
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          elevation: 0.5,
+          shape: RoundedRectangleBorder(
+            side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 4,
+            ),
+            title: Text(
+              challenge.title,
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w600,
+                decoration: isCompletedToday
+                    ? TextDecoration.lineThrough
+                    : null,
+              ),
+            ),
+            subtitle: Text(
+              '${challenge.points} Points',
+              style: TextStyle(
+                color: isCompletedToday ? Colors.green : Colors.black54,
+                fontSize: 13,
+                fontWeight: isCompletedToday
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.edit_outlined,
+                    color: Colors.black38,
+                    size: 20,
+                  ),
+                  onPressed: () => _showEditChallengeDialog(index),
+                ),
+                IconButton(
+                  icon: Icon(
+                    isCompletedToday
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    color: isCompletedToday ? Colors.green : Colors.black87,
+                    size: 26,
+                  ),
+                  onPressed: () => _submitChallenge(index),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentMember = _currentMemberLabel();
@@ -731,7 +962,6 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                 ),
               ),
               const SizedBox(height: 18),
-              // Votes section
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -751,9 +981,7 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
               if (_isLoading)
                 const SizedBox.shrink()
               else if (_votes.isEmpty)
@@ -876,7 +1104,6 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                   }).toList(),
                 ),
               const SizedBox(height: 18),
-              // Challenges header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -892,97 +1119,12 @@ class _GroupDetailPageState extends State<GroupDetailPage> {
                       backgroundColor: Colors.black,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Create'),
+                    child: const Text('Create challenge'),
                   ),
                 ],
               ),
-
               const SizedBox(height: 12),
-
-              if (_isLoading)
-                const Center(child: CircularProgressIndicator())
-              else if (_challenges.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.03),
-                        blurRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Text(
-                    'No challenges yet. Create one to get started.',
-                  ),
-                )
-              else
-                Column(
-                  children: _challenges.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final c = entry.value;
-                    final isCompletedToday = c.completedOn(_todayKey());
-                    return Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.black12),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  c.title,
-                                  style: Theme.of(context).textTheme.bodyLarge,
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${c.points} points per day',
-                                  style: Theme.of(context).textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Column(
-                            children: [
-                              IconButton(
-                                onPressed: () =>
-                                    _showEditChallengeDialog(index),
-                                icon: const Icon(
-                                  Icons.edit,
-                                  color: Colors.black,
-                                ),
-                                tooltip: 'Edit challenge',
-                              ),
-                              ElevatedButton(
-                                onPressed: isCompletedToday
-                                    ? null
-                                    : () => _submitChallenge(index),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.black,
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: Text(
-                                  isCompletedToday ? 'Done today' : 'Submit',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
-                ),
+              _buildChallengesSection(),
             ],
           ),
         ),

@@ -38,13 +38,4 @@ class AppFlushbar {
       backgroundColor: Colors.red,
     );
   }
-
-  static void info(BuildContext context, String message) {
-    show(
-      context,
-      message,
-      icon: Icons.info_rounded,
-      backgroundColor: Theme.of(context).colorScheme.secondary,
-    );
-  }
 }

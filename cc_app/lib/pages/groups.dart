@@ -93,6 +93,7 @@ class _GroupsPageState extends State<GroupsPage> {
 
     try {
       final groups = await Client.myGroups(token!["id"]);
+      debugPrint('Loaded groups: $groups');
       setState(() {
         _myGroups = groups;
         _isLoading = false;
@@ -107,6 +108,7 @@ class _GroupsPageState extends State<GroupsPage> {
 
   Widget _buildGroupCard(
     String groupName, {
+    required int groupId,
     required String subtitle,
     Color leadingColor = Colors.black,
   }) {
@@ -120,7 +122,8 @@ class _GroupsPageState extends State<GroupsPage> {
         _setSelectedIndex(2);
         Navigator.of(context).push(
           PageRouteBuilder(
-            pageBuilder: (_, __, ___) => GroupDetailPage(groupName: groupName),
+            pageBuilder: (_, __, ___) =>
+                GroupDetailPage(groupName: groupName, groupId: groupId),
             transitionDuration: Duration.zero,
             reverseTransitionDuration: Duration.zero,
           ),
@@ -270,13 +273,20 @@ class _GroupsPageState extends State<GroupsPage> {
                           ),
                         )
                       else
-                        ..._myGroups.map(
-                          (g) => _buildGroupCard(
-                            g['name']?.toString() ?? 'Unnamed Group',
+                        ..._myGroups.map((g) {
+                          final groupData = g['group'] as Map<String, dynamic>?;
+                          final rawId = g['groupsId'];
+
+                          final int parsedId = rawId is int
+                              ? rawId
+                              : (int.tryParse(rawId?.toString() ?? '') ?? 0);
+                          return _buildGroupCard(
+                            groupData?['name']?.toString() ?? 'Unnamed Group',
+                            groupId: parsedId,
                             subtitle: 'Your group',
                             leadingColor: Colors.black,
-                          ),
-                        ),
+                          );
+                        }),
 
                       const SizedBox(height: 20),
 
@@ -309,12 +319,18 @@ class _GroupsPageState extends State<GroupsPage> {
                           ),
                         )
                       else
-                        ..._friendGroups.map(
-                          (g) => _buildGroupCard(
+                        ..._friendGroups.map((g) {
+                          final rawId = g['id'];
+                          final int parsedId = rawId is int
+                              ? rawId
+                              : (int.tryParse(rawId?.toString() ?? '') ?? 0);
+
+                          return _buildGroupCard(
                             g['name']?.toString() ?? 'Unnamed Group',
                             subtitle: 'Friend group',
-                          ),
-                        ),
+                            groupId: parsedId,
+                          );
+                        }),
                       const SizedBox(height: 80),
                     ],
                   ],

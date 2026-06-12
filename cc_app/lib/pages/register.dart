@@ -61,7 +61,6 @@ class RegisterPage extends StatelessWidget {
                     borderSide: BorderSide(color: Colors.white),
                   ),
                 ),
-                obscureText: true,
               ),
             ),
             const SizedBox(height: 16),

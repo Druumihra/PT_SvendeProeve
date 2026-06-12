@@ -1,3 +1,4 @@
+import 'package:cc_app/app_flushbar.dart';
 import 'package:cc_app/client.dart';
 import 'package:cc_app/pages/groups.dart';
 import 'package:cc_app/pages/home.dart';
@@ -5,7 +6,9 @@ import 'package:cc_app/pages/user.dart';
 import 'package:flutter/material.dart';
 
 class SearchPage extends StatefulWidget {
-  const SearchPage({super.key});
+  final String? successMessage;
+
+  const SearchPage({super.key, this.successMessage});
 
   @override
   State<SearchPage> createState() => _SearchPageState();
@@ -29,6 +32,12 @@ class _SearchPageState extends State<SearchPage> {
   @override
   void initState() {
     super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.successMessage != null) {
+        AppFlushbar.success(context, widget.successMessage!);
+      }
+    });
     _searchController = TextEditingController();
     _searchFocusNode = FocusNode()
       ..addListener(() {
@@ -110,81 +119,218 @@ class _SearchPageState extends State<SearchPage> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) {
-        return AlertDialog(
-          backgroundColor: Colors.white,
-          title: const Text(
-            'Your Friends',
-            style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-          ),
-          content: SizedBox(
-            width: 360,
-            height: 300,
-            child: FutureBuilder<List<dynamic>>(
-              future: Client.getFriends(token!["id"], token!["id"]),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Colors.black),
-                  );
-                }
-
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      'Error: ${snapshot.error}',
-                      style: const TextStyle(color: Colors.redAccent),
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                }
-
-                final friends = snapshot.data ?? [];
-
-                if (friends.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      'No friends found.',
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  itemCount: friends.length,
-                  separatorBuilder: (_, _) =>
-                      const Divider(height: 1, color: Colors.black12),
-                  itemBuilder: (_, index) {
-                    final friend = friends[index];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.black12,
-                        child: Icon(Icons.person, color: Colors.black87),
-                      ),
-                      title: Text(
-                        friend["name"] ?? "Unknown User",
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      trailing: const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                      ),
-                    );
-                  },
-                );
-              },
+        return DefaultTabController(
+          length: 2,
+          child: AlertDialog(
+            backgroundColor: Colors.white,
+            title: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Social Hub',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                TabBar(
+                  labelColor: Colors.black,
+                  unselectedLabelColor: Colors.black54,
+                  indicatorColor: Colors.black,
+                  tabs: [
+                    Tab(text: 'Friends'),
+                    Tab(text: 'Requests'),
+                  ],
+                ),
+              ],
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              style: TextButton.styleFrom(foregroundColor: Colors.black),
-              child: const Text('Close'),
+            content: SizedBox(
+              width: 360,
+              height: 300,
+              child: StatefulBuilder(
+                builder: (context, setDialogState) {
+                  void refresh() => setDialogState(() {});
+
+                  return TabBarView(
+                    children: [
+                      FutureBuilder<List<dynamic>>(
+                        future: Client.getFriends(token!["id"]),
+                        builder: (context, snapshot) {
+                          final friends = snapshot.data ?? [];
+                          if (friends.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'No friends found.',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            );
+                          }
+                          return ListView.separated(
+                            itemCount: friends.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1, color: Colors.black12),
+                            itemBuilder: (_, index) {
+                              final friend = friends[index];
+                              final String friendName =
+                                  friend["friendof"]?["name"]?.toString() ??
+                                  "Unknown User";
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.black,
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                title: Text(friendName),
+                                trailing: IconButton(
+                                  icon: const Icon(
+                                    Icons.person_remove_sharp,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () async {
+                                    try {
+                                      final message = await Client.removeFriend(
+                                        token?["id"],
+                                        friend["friendof"]["id"],
+                                      );
+                                      if (context.mounted) {
+                                        AppFlushbar.success(context, message);
+                                        refresh();
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        final cleanErrorMessage = e
+                                            .toString()
+                                            .replaceAll('Exception: ', '');
+                                        AppFlushbar.error(
+                                          context,
+                                          cleanErrorMessage,
+                                        );
+                                      }
+                                    }
+                                  },
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+
+                      FutureBuilder<List<dynamic>>(
+                        future: Client.getFriendRequests(token!["id"]),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState ==
+                              ConnectionState.waiting) {
+                            return const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.black,
+                              ),
+                            );
+                          }
+                          if (snapshot.hasError) {
+                            return Center(
+                              child: Text(
+                                'Error updating requests.',
+                                style: const TextStyle(color: Colors.redAccent),
+                              ),
+                            );
+                          }
+                          final requests = snapshot.data ?? [];
+                          if (requests.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'No pending requests.',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                            );
+                          }
+
+                          return ListView.separated(
+                            itemCount: requests.length,
+                            separatorBuilder: (_, _) =>
+                                const Divider(height: 1, color: Colors.black12),
+                            itemBuilder: (_, index) {
+                              final request = requests[index];
+                              final requesterName = request["user"]["name"];
+                              final requestId = request["user"]["id"];
+                              final userId = token?["id"];
+
+                              return ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                leading: const CircleAvatar(
+                                  backgroundColor: Colors.black,
+                                  child: Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                title: Text(
+                                  requesterName,
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.check,
+                                        color: Colors.green,
+                                      ),
+                                      onPressed: () async {
+                                        bool success =
+                                            await Client.acceptFriendRequest(
+                                              userId,
+                                              requestId,
+                                            );
+                                        if (success) refresh();
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.close,
+                                        color: Colors.redAccent,
+                                      ),
+                                      onPressed: () {
+                                        debugPrint(
+                                          "Decline tapped for request ID: $requestId",
+                                        );
+                                      },
+                                      /*
+                                      onPressed: 
+                                      () async {
+                                        bool success =
+                                            await Client.handleFriendRequest(
+                                              requestId,
+                                              false,
+                                            );
+                                        if (success) refresh();
+                                      },
+                                      */
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                style: TextButton.styleFrom(foregroundColor: Colors.black),
+                child: const Text('Close'),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -260,6 +406,9 @@ class _SearchPageState extends State<SearchPage> {
                             itemCount: _searchResults.length,
                             itemBuilder: (context, index) {
                               final user = _searchResults[index];
+                              final bool isCurrentUser =
+                                  user["id"]?.toString() ==
+                                  token?["id"]?.toString();
                               return Card(
                                 color: Colors.white12,
                                 margin: const EdgeInsets.symmetric(vertical: 6),
@@ -275,15 +424,52 @@ class _SearchPageState extends State<SearchPage> {
                                     user["name"] ?? "Unknown",
                                     style: const TextStyle(color: Colors.white),
                                   ),
-                                  trailing: IconButton(
-                                    icon: const Icon(
-                                      Icons.person_add,
-                                      color: Colors.greenAccent,
-                                    ),
-                                    onPressed: () {
-                                      // send friend request logic here
-                                    },
-                                  ),
+                                  trailing: isCurrentUser
+                                      ? const Padding(
+                                          padding: EdgeInsets.only(right: 12),
+                                          child: Text(
+                                            "You",
+                                            style: TextStyle(
+                                              color: Colors.white38,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        )
+                                      : IconButton(
+                                          icon: const Icon(
+                                            Icons.person_add,
+                                            color: Colors.greenAccent,
+                                          ),
+                                          onPressed: () async {
+                                            try {
+                                              final message =
+                                                  await Client.sendFriendRequest(
+                                                    token?["id"],
+                                                    user["id"],
+                                                  );
+                                              if (context.mounted) {
+                                                AppFlushbar.success(
+                                                  context,
+                                                  message,
+                                                );
+                                              }
+                                            } catch (e) {
+                                              if (context.mounted) {
+                                                final cleanErrorMessage = e
+                                                    .toString()
+                                                    .replaceAll(
+                                                      'Exception: ',
+                                                      '',
+                                                    );
+                                                AppFlushbar.error(
+                                                  context,
+                                                  cleanErrorMessage,
+                                                );
+                                              }
+                                            }
+                                          },
+                                        ),
                                 ),
                               );
                             },

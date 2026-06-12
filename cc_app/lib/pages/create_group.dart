@@ -115,12 +115,14 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: () async {
-                    final message = await Client().createGroup(
-                      _groupNameController.text,
-                    );
-                    if (context.mounted) {
-                      AppFlushbar.success(context, message);
+                    try {
+                      final message = await Client().createGroup(
+                        _groupNameController.text,
+                      );
+
                       if (context.mounted) {
+                        AppFlushbar.success(context, message);
+
                         Navigator.of(context).pushReplacement(
                           PageRouteBuilder(
                             pageBuilder: (_, __, ___) =>
@@ -129,6 +131,14 @@ class _CreateGroupPageState extends State<CreateGroupPage> {
                             reverseTransitionDuration: Duration.zero,
                           ),
                         );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        final cleanErrorMessage = e.toString().replaceAll(
+                          'Exception: ',
+                          '',
+                        );
+                        AppFlushbar.error(context, cleanErrorMessage);
                       }
                     }
                   },
