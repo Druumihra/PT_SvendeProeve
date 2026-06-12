@@ -297,8 +297,9 @@ app.post('/API/verify', async (req: any, res: any) => {
 
   if (!result.valid) {
     res.status(400).json('Unauthorized');
+  } else {
+    res.status(200).json('Authorized');
   }
-  res.status(200).json('Authorized');
 });
 
 // setup so it reads public key from file and then responds with it
