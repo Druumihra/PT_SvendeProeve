@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
-import test from 'node:test';
 
 const app = express();
 app.use(express.json());
