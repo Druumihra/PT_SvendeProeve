@@ -22,9 +22,9 @@ model Users {
 
 model Friends {
   accepted Boolean @default(false)
-  user     Users?  @relation(name: "user", fields: [usersId], references: [id])
+  user     Users?  @relation(name: "user", fields: [usersId], references: [id], onDelete: Cascade)
+  friendof Users?  @relation(name: "friendof", fields: [friendid], references: [id], onDelete: Cascade)
   usersId  Int
-  friendof Users?  @relation(name: "friendof", fields: [friendid], references: [id])
   friendid Int
 
   @@id([usersId, friendid])
@@ -33,15 +33,14 @@ model Friends {
 model Groups {
   id         Int            @id @default(autoincrement())
   name       String         @unique
-  usersId    Int?
   admins     GroupAdmins[]
   challenges Challenges[]
   members    GroupMembers[]
 }
 
 model GroupMembers {
-  member   Users  @relation(fields: [usersId], references: [id])
-  group    Groups @relation(fields: [groupsId], references: [id])
+  member   Users  @relation(fields: [usersId], references: [id], onDelete: Cascade)
+  group    Groups @relation(fields: [groupsId], references: [id], onDelete: Cascade)
   usersId  Int
   groupsId Int
 
@@ -49,8 +48,8 @@ model GroupMembers {
 }
 
 model GroupAdmins {
-  admin    Users  @relation(fields: [usersId], references: [id])
-  group    Groups @relation(fields: [groupsId], references: [id])
+  admin    Users  @relation(fields: [usersId], references: [id], onDelete: Cascade)
+  group    Groups @relation(fields: [groupsId], references: [id], onDelete: Cascade)
   usersId  Int
   groupsId Int
 
@@ -62,7 +61,7 @@ model Challenges {
   id                Int                @id @unique @default(autoincrement())
   description       String
   score             Int
-  group             Groups             @relation(fields: [groupsId], references: [id])
+  group             Groups             @relation(fields: [groupsId], references: [id], onDelete: Cascade)
   groupsId          Int
   active            Boolean
   createdAt         DateTime           @default(now())
@@ -74,18 +73,18 @@ model Challenges {
 model votes {
   id           Int        @id @default(autoincrement())
   User         Users?     @relation(fields: [usersId], references: [id])
-  Challenge    Challenges @relation(fields: [challengesId], references: [id])
+  Challenge    Challenges @relation(fields: [challengesId], references: [id], onDelete: Cascade)
   usersId      Int?
   challengesId Int
   vote         Boolean?
 }
 
 model ChallengesResult {
-  User         Users      @relation(fields: [usersId], references: [id])
+  User         Users      @relation(fields: [usersId], references: [id], onDelete: Cascade)
   proof        Bytes
   validated    Boolean    @default(false)
   date         DateTime   @default(now())
-  Challenge    Challenges @relation(fields: [challengesId], references: [id])
+  Challenge    Challenges @relation(fields: [challengesId], references: [id], onDelete: Cascade)
   usersId      Int
   challengesId Int
 

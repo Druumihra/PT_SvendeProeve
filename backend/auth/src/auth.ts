@@ -219,7 +219,7 @@ app.post('/createUser', async (req: any, res: any) => {
   }
 });
 
-app.post('/edit/user/', async (req: any, res: any) => {
+app.put('/edit/user/', async (req: any, res: any) => {
   if (!req.headers['cookie']) {
     res.status(400).json('Missing cookie');
   } else {
@@ -230,6 +230,7 @@ app.post('/edit/user/', async (req: any, res: any) => {
       await prisma.users.update({
         where: { id: result.userId! },
         data: {
+          name: req.body.username,
           password: bcrypt.hashSync(req.body.password, 10),
           email: req.body.email,
         },
@@ -239,21 +240,6 @@ app.post('/edit/user/', async (req: any, res: any) => {
     res.status(500).json('An error occurred while updating the user.');
   }
 });
-
-// app.post('/edit/user/email', async (req: any, res: any) => {
-//   if (!(await auth(req.headers['cookie'].split('session=')[1]))) {
-//     res.status(401).json('Unauthorized');
-//   }
-//   if (!req.body.email) {
-//     res.status(400).json('Missing Email');
-//   } else {
-//     await prisma.users.update({
-//       where: { id: req.body.id },
-//       data: { email: req.body.email },
-//     });
-//     return res.status(200).json('Success');
-//   }
-// });
 
 app.delete('/deleteUser', async (req: any, res: any) => {
   if (!req.headers['cookie']) {

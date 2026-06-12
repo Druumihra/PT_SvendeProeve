@@ -62,7 +62,7 @@ async function auth(req: any, res: any, next: any) {
   //     headers: {
   //       'Content-Type': 'application/json',
   //       include: 'credentials',
-  //       cookie: req.headers['cookie'],
+  //       cookie: req.headers['cookie],'
   //     },
   //   });
   //   if (!response.ok) {
@@ -103,30 +103,41 @@ async function isgroupadmin(groupId: number, userId: number) {
 app.put('/edit/:id/user', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.id);
 
-  await prisma.users.update({
-    where: { id: id },
-    data: {
-      name: req.body.username,
-      profilepicture: req.body.picture,
-    },
-  });
-
-  if (req.body.email || req.body.password) {
-    let response = await fetch('http://localhost:3050/updateAuth', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
+  try {
+    await prisma.users.update({
+      where: { id: id },
+      data: {
+        name: req.body.username,
+        profilepicture: req.body.picture,
       },
-      body: JSON.stringify({
-        email: req.body.email,
-        password: req.body.password,
-      }),
     });
-    if (!response.ok) {
-      res.status(500).json(response);
+
+    if (req.body.email || req.body.password) {
+      let response = await fetch(`${process.env.AUTH_URL}/edit/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          include: 'credentials',
+          cookie: req.headers['cookie'],
+        },
+        body: JSON.stringify({
+          username: req.body.username,
+          email: req.body.email,
+          password: req.body.password,
+        }),
+      });
+      if (!response.ok) {
+        res.status(500).json('Error from Auth');
+      }
+    }
+    res.status(200).json('Success');
+  } catch (e) {
+    if (e instanceof PrismaClientKnownRequestError) {
+      console.log(e);
+
+      res.status(500).json('internal error');
     }
   }
-  res.status(200).json('Success');
 });
 
 app.delete('/auth/delete/:id/user', auth, async (req: any, res: any) => {
@@ -142,13 +153,18 @@ app.delete('/auth/delete/:id/user', auth, async (req: any, res: any) => {
 });
 
 app.get('/user/findUsers/:query', auth, async (req: any, res: any) => {
-  let result = await prisma.users.findMany({
-    where: {
-      name: { contains: req.params.query },
-    },
-  });
-  console.log(result);
-  res.status(200).json(result);
+  try {
+    let result = await prisma.users.findMany({
+      where: {
+        name: { contains: req.params.query },
+      },
+    });
+    res.status(200).json(result);
+  } catch (e) {
+    if (e instanceof PrismaClientKnownRequestError) {
+      res.status(500).json('internal error');
+    }
+  }
 });
 
 app.get('/user/getUser/:id', auth, async (req: any, res: any) => {
@@ -277,61 +293,77 @@ app.post('/group/create', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
-
-  let result = await prisma.groups.create({
-    data: {
-      name: req.body.groupName,
-      usersId: req.body.userId,
-      admins: {
-        create: { usersId: req.body.userId },
+  try {
+    let result = await prisma.groups.create({
+      data: {
+        name: req.body.groupName,
+        admins: {
+          create: { usersId: req.body.userId },
+        },
+        members: {
+          create: { usersId: req.body.userId },
+        },
       },
-    },
-  });
+    });
 
-  if (result === null || result === undefined) {
-    res.status(500).json('An error occurred while creating the group.');
-  } else {
-    res.status(200).json('Group created successfully.');
+    if (result === null || result === undefined) {
+      res.status(500).json('An error occurred while creating the group.');
+    } else {
+      res.status(200).json('Group created successfully.');
+    }
+  } catch (e) {
+    if (e instanceof PrismaClientKnownRequestError) {
+      res.status(500);
+    }
   }
 });
 
-app.get('/group/getgroups/:id', auth, async (req: any, res: any) => {
+app.get('/user/:id/getgroups', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.id);
-  let result = await prisma.users.findUnique({
-    where: { id: id },
-    select: {
-      groups: true,
+  let result = await prisma.groupMembers.findMany({
+    where: { usersId: id },
+    include: {
+      group: { select: { name: true } },
     },
+    omit: { usersId: true },
   });
+  if (result == null) {
+    res.status(200).json('Not a part of any groups');
+  }
   res.status(200).json(result);
 });
 app.get('/group/:groupId/getMembers', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
   const members = await prisma.groups.findUnique({
     where: { id: id },
-    select: { members: true },
+    include: {
+      members: {
+        omit: { usersId: true, groupsId: true },
+        include: { member: { omit: { profilepicture: true } } },
+      },
+    },
   });
   res.status(200).json(members);
 });
 
 app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
-
   if (!(await isgroupadmin(id, req.body.adminId))) {
     res.status(401).json('Unauthorized');
   }
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
-  console.log(req.body);
   let result = await prisma.users.update({
     where: {
       id: req.body.userId,
     },
     data: {
       groups: {
-        connect: {
-          usersId_groupsId: { usersId: req.body.userId, groupsId: id },
+        create: {
+          group: {
+            connect: { id: id },
+          },
         },
       },
     },
@@ -349,16 +381,19 @@ app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
-  await prisma.users.update({
+  let result = await prisma.users.update({
     where: { id: req.body.userId },
     data: {
       admin: {
-        connect: {
-          usersId_groupsId: { usersId: req.body.userId, groupsId: id },
+        create: {
+          group: {
+            connect: { id: id },
+          },
         },
       },
     },
   });
+  console.log(result);
   res.status(200).json('success');
 });
 
@@ -368,20 +403,25 @@ app.post('/group/:groupId/kickUser', auth, async (req: any, res: any) => {
   if (!(await isgroupadmin(id, req.body.adminId))) {
     res.status(401).json('Unauthorized');
   }
-  let result = await prisma.users.update({
-    where: { id: req.body.usersid },
-    data: {
-      groups: {
-        disconnect: {
-          usersId_groupsId: {
-            usersId: req.body.usersid,
-            groupsId: id,
-          },
-        },
+  let result = await prisma.groupMembers.delete({
+    where: {
+      usersId_groupsId: {
+        groupsId: id,
+        usersId: req.body.userId,
       },
     },
   });
-  res.status(200).json(result);
+  if (await isgroupadmin(id, req.body.userId)) {
+    await prisma.groupAdmins.delete({
+      where: {
+        usersId_groupsId: {
+          groupsId: id,
+          usersId: req.body.userId,
+        },
+      },
+    });
+  }
+  res.status(200).json('User successfully deleted');
 });
 
 app.post('/group/:groupId/delete', auth, async (req: any, res: any) => {
@@ -393,11 +433,12 @@ app.post('/group/:groupId/delete', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Invalid request body.');
   }
-  await prisma.groups.delete({
+  let result = await prisma.groups.delete({
     where: {
       id: id,
     },
   });
+  res.status(200).json('Group successfully deleted');
 });
 
 app.put('/group/:groupId/edit', auth, async (req: any, res: any) => {
@@ -424,7 +465,7 @@ app.post('/challenge/create', auth, async (req: any, res: any) => {
     data: {
       name: req.body.challengeName,
       score: req.body.score,
-      description: req.body.challengeDescription,
+      description: req.body.description,
       active: true,
       group: { connect: { id: req.body.groupId } },
     },
@@ -436,11 +477,11 @@ app.post('/challenges/:groupId/getAll', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
   const challenges = await prisma.groups.findUnique({
     where: {
-      name: req.body.name,
+      id: id,
     },
     include: { challenges: true },
   });
-  res.json(challenges);
+  res.status(200).json(challenges);
 });
 
 app.put('/challenge/:challengeId/edit', auth, async (req: any, res: any) => {
@@ -448,28 +489,19 @@ app.put('/challenge/:challengeId/edit', auth, async (req: any, res: any) => {
 
   if (!req.body) {
     res.status(400).json('Invalid request body.');
-  } else {
-    let check = await prisma.challenges.findFirst({
-      where: {
-        id: id,
-      },
-    });
-    if (check === null || check === undefined) {
-      res.status(404).json('Challenge not found.');
-    } else {
-      await prisma.challenges.update({
-        where: {
-          id: id,
-        },
-        data: {
-          score: req.body.score,
-          name: req.body.challengeName,
-          description: req.body.challengeDescription,
-          groupsId: req.body.groupId,
-        },
-      });
-    }
   }
+  let result = await prisma.challenges.update({
+    where: {
+      id: id,
+    },
+    data: {
+      score: req.body.score,
+      name: req.body.challengeName,
+      description: req.body.description,
+    },
+  });
+
+  res.status(200).json(result);
 });
 
 app.put('/challenge/:challengeId/end', auth, async (req: any, res: any) => {
@@ -490,31 +522,35 @@ app.put('/challenge/:challengeId/end', auth, async (req: any, res: any) => {
   }
 });
 
-app.post('/challenge/:challengeId/delete', auth, async (req: any, res: any) => {
-  if (!(await isgroupadmin(req.body.groupId, req.body.userId))) {
-    res.status(401).json('Unauthorized');
-  }
-  await prisma.challenges.delete({
-    where: {
-      id: req.params.challengeId,
-    },
-  });
-});
+app.delete(
+  '/challenge/:challengeId/delete',
+  auth,
+  async (req: any, res: any) => {
+    let id: number = await parseInt(req.params.challengeId);
+
+    if (!(await isgroupadmin(req.body.groupId, req.body.userId))) {
+      res.status(401).json('Unauthorized');
+    }
+    let result = await prisma.challenges.delete({
+      where: {
+        id: id,
+      },
+    });
+    console.log(result);
+    res.status(200).json('Challenge deleted');
+  },
+);
 
 app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.challengeId);
   let result = await prisma.challengesResult.create({
     data: {
       proof: req.body.image,
-      User: {
-        connect: {
-          id: req.body.userId,
-        },
-      },
       Challenge: {
-        connect: {
-          id: id,
-        },
+        connect: { id: id },
+      },
+      User: {
+        connect: { id: req.body.userId },
       },
     },
   });
@@ -525,6 +561,7 @@ app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
   }
 });
 
+//WIP
 // should return the points of all players in a challenge, ordered by score descending
 app.get('/challenge/:groupId/scoreboard', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
@@ -536,41 +573,66 @@ app.get('/challenge/:groupId/scoreboard', auth, async (req: any, res: any) => {
         include: {
           challengesResults: {
             where: { validated: true },
-            select: { User: true, challengesId: true },
+            include: { User: true },
           },
         },
       },
     },
   });
-  console.log(result);
-  // for each user it should tally the total score from the returned validated challenge completions
 
-  // should look something like {playerid: total score}
-  res.status(200).json(result);
+  const totals: Record<number, number> = {};
+
+  result?.challenges.forEach((challenge: any) => {
+    challenge.challengesResults.forEach((submission: any) => {
+      const username = submission.User.name;
+
+      totals[username] = (totals[username] ?? 0) + challenge.score;
+    });
+  });
+
+  const scoreboard = Object.entries(totals)
+    .map(([username, score]) => ({
+      username,
+      score,
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  res.status(200).json(scoreboard);
 });
 
+//WIP
 //should get a players points for a specific challenge, for the current week, ordered by date
 app.get(
-  '/challenge/:challengeId/getplayerpoints',
+  '/challenge/:userId/getplayerpoints',
   auth,
   async (req: any, res: any) => {
-    let id: number = await parseInt(req.params.challengeId);
+    let id: number = await parseInt(req.params.userId);
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    let result = await prisma.challengesResult.findMany({
-      take: 7,
+
+    const completions = await prisma.challengesResult.findMany({
       where: {
+        usersId: id,
+        validated: true,
         date: {
           gte: oneWeekAgo,
         },
-        challengesId: id,
-        usersId: req.body.userid,
       },
-      select: { score: true, date: true },
-      orderBy: { date: 'desc' },
+      include: {
+        Challenge: {
+          select: {
+            score: true,
+          },
+        },
+      },
     });
 
-    res.status(200).json(result);
+    const totalPoints = completions.reduce(
+      (sum, completion) => sum + completion.Challenge.score,
+      0,
+    );
+
+    res.status(200).json(totalPoints);
   },
 );
 
@@ -580,55 +642,58 @@ app.post(
   async (req: any, res: any) => {
     let id: number = await parseInt(req.params.challengeId);
 
-    if (!(await isgroupadmin(id, req.body.adminId))) {
+    if (!(await isgroupadmin(req.body.groupId, req.body.adminId))) {
       res.status(401).json('Unauthorized');
-    }
-    prisma.challengesResult.update({
-      where: {
-        usersId_challengesId: { usersId: req.body.usersId, challengesId: id },
-      },
-      data: {
-        validated: true,
-      },
-    });
-    res.status(200).json('Submission accepted');
-  },
-);
-app.post(
-  '/challenge/:challengeId/createvote',
-  auth,
-  async (req: any, res: any) => {
-    let id: number = await parseInt(req.params.challengeId);
-
-    //should allow a group admin to create a vote for a challenge
-    await prisma.challenges.update({
-      where: {
-        id: id,
-      },
-      data: {
-        votes: {
-          create: [{ vote: req.body.vote }],
+    } else {
+      let result = await prisma.challengesResult.update({
+        where: {
+          usersId_challengesId: { usersId: req.body.userId, challengesId: id },
         },
-      },
-    });
-    res.status(200).json('Vote sucessfully created.');
+        data: {
+          validated: true,
+        },
+      });
+      console.log(result);
+      res.status(200).json('Submission accepted');
+    }
   },
 );
 
-app.post('/challenge/:challengeId/vote', auth, async (req: any, res: any) => {
-  let id: number = await parseInt(req.params.challengeId);
-  if (req.body.vote.type) {
-    res.status(400).json('Invalid vote value.');
-  }
-  let result = await prisma.votes.create({
-    data: {
-      User: { connect: { id: req.body.userId } },
-      Challenge: { connect: { id: id } },
-      vote: req.body.vote,
-    },
-  });
-  res.status(200).json(result);
-});
+// app.post(
+//   '/challenge/:challengeId/createvote',
+//   auth,
+//   async (req: any, res: any) => {
+//     let id: number = await parseInt(req.params.challengeId);
+
+//     //should allow a group admin to create a vote for a challenge
+//     await prisma.challenges.update({
+//       where: {
+//         id: id,
+//       },
+//       data: {
+//         votes: {
+//           create: [{ vote: req.body.vote }],
+//         },
+//       },
+//     });
+//     res.status(200).json('Vote sucessfully created.');
+//   },
+// );
+
+// app.post('/challenge/:challengeId/vote', auth, async (req: any, res: any) => {
+//   let id: number = await parseInt(req.params.challengeId);
+//   if (req.body.vote.type) {
+//     res.status(400).json('Invalid vote value.');
+//   }
+//   let result = await prisma.votes.create({
+//     data: {
+//       User: { connect: { id: req.body.userId } },
+//       Challenge: { connect: { id: id } },
+//       vote: req.body.vote,
+//     },
+//   });
+//   res.status(200).json(result);
+// });
 
 const PORT = 3050;
 app.listen(PORT, () => {
