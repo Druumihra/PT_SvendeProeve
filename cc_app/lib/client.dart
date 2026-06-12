@@ -26,8 +26,8 @@ String? encodedToken;
 Map<String, dynamic>? token;
 
 class Client {
-  static final String authUrl = "http://157.180.66.30:4000/";
-  static final String apiUrl = "http://157.180.66.30:4001/";
+  static final String authUrl = "http://157.180.66.30:4000";
+  static final String apiUrl = "http://157.180.66.30:4001";
   String? pfpUrl;
 
   // User endpoints
