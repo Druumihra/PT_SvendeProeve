@@ -238,7 +238,7 @@ app.post('/createUser', async (req: any, res: any) => {
 app.put('/edit/user/', async (req: any, res: any) => {
   let result = await auth(req);
   if (!result.valid && result.data != null) {
-    res.status(401).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   } else {
     await prisma.users.update({
       where: { id: result.userId! },
@@ -287,7 +287,7 @@ app.delete('/deleteUser', async (req: any, res: any) => {
         console.log(err);
       }
     } else {
-      res.status(401).json('Unauthorized');
+      res.status(403).json('Unauthorized');
     }
   }
 });
@@ -296,7 +296,7 @@ app.post('/API/verify', async (req: any, res: any) => {
   let result = await auth(req);
 
   if (!result.valid) {
-    res.status(400).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   } else {
     res.status(200).json('Authorized');
   }
