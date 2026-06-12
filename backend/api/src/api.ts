@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { prisma } from '../lib/prisma';
+import { connect } from 'node:http2';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 
 // import type {
 //   UsersModel as user,
@@ -104,8 +106,8 @@ app.put('/edit/:id/user', auth, async (req: any, res: any) => {
   await prisma.users.update({
     where: { id: id },
     data: {
-      username: req.body.username,
-      profilePicture: req.body.picture,
+      name: req.body.username,
+      profilepicture: req.body.picture,
     },
   });
 
@@ -145,6 +147,7 @@ app.get('/user/findUsers/:query', auth, async (req: any, res: any) => {
       name: { contains: req.params.query },
     },
   });
+  console.log(result);
   res.status(200).json(result);
 });
 
@@ -153,52 +156,121 @@ app.get('/user/getUser/:id', auth, async (req: any, res: any) => {
   let result = await prisma.users.findUnique({
     where: { id: id },
   });
-  res.status(200).json(result);
+  if (result == null) {
+    res.status(400).json('No user found');
+  } else {
+    res.status(200).json(result);
+  }
 });
 
 app.post('/user/addFriend', auth, async (req: any, res: any) => {
-  prisma.users.update({
-    where: { id: req.body.userId },
-    data: {
-      friends: {
-        create: { friendid: req.body.friendId },
+  try {
+    let result = await prisma.users.update({
+      where: { id: req.body.usersId },
+      data: {
+        friends: {
+          create: {
+            friendof: { connect: { id: req.body.friendId } },
+          },
+        },
       },
-    },
-  });
-  res.status(200).json('Friend request sent.');
+    });
+    console.log(result);
+    res.status(200).json('Friend request sent.');
+  } catch (e) {
+    if (e instanceof PrismaClientKnownRequestError) {
+      if (e.code === 'P2002') {
+        res.status(400).json('Request already pending');
+      } else {
+        res.status(400).json('Unable to send friend request');
+      }
+    }
+  }
 });
 
 app.put('/user/acceptFriend', auth, async (req: any, res: any) => {
-  prisma.users.update({
+  let result = await prisma.users.update({
     where: {
       id: req.body.userId,
-      friends: { some: { friendid: req.body.friendId } },
     },
-    data: { accepted: true },
+    data: {
+      friends: {
+        update: {
+          where: {
+            usersId_friendid: {
+              usersId: req.body.userId,
+              friendid: req.body.friendId,
+            },
+          },
+          data: { accepted: true },
+        },
+      },
+    },
   });
 
+  console.log(result);
   res.status(200).json('Friend request accepted.');
 });
 
 app.delete('/user/removeFriend', auth, async (req: any, res: any) => {
-  prisma.friends.delete({
-    where: {
-      usersId: req.body.userId,
-      friendid: req.body.friendId,
-    },
-  });
-  res.status(200).json('Friend removed.');
+  try {
+    let result = await prisma.users.update({
+      where: {
+        id: req.body.userId,
+      },
+      data: {
+        friends: {
+          delete: {
+            usersId_friendid: {
+              usersId: req.body.userId,
+              friendid: req.body.friendId,
+            },
+          },
+        },
+      },
+    });
+    console.log(result);
+    res.status(200).json('Friend removed.');
+  } catch (e) {
+    console.log(e);
+    res.status(500).json(e);
+  }
+});
+
+app.post('/user/getFriendRequests', auth, async (req: any, res: any) => {
+  try {
+    const friends = await prisma.friends.findMany({
+      where: {
+        friendid: req.body.id,
+        accepted: false,
+      },
+      include: {
+        user: { select: { id: true, name: true } },
+      },
+      omit: { usersId: true, friendid: true },
+    });
+    res.status(200).json(friends);
+  } catch (e) {
+    res.status(400).json(e);
+  }
 });
 
 app.post('/user/getFriends', auth, async (req: any, res: any) => {
-  const friends = await prisma.users.findUnique({
-    where: {
-      id: req.body.id,
-      friends: { some: { usersId: req.body.userId, accepted: true } },
-    },
-    select: { name: true, id: true },
-  });
-  res.status(200).json(friends);
+  try {
+    const friends = await prisma.friends.findMany({
+      where: {
+        usersId: req.body.id,
+        accepted: true,
+      },
+      include: {
+        friendof: { select: { id: true, name: true } },
+      },
+      omit: { accepted: true, usersId: true, friendid: true },
+    });
+    res.status(200).json(friends);
+  } catch (e) {
+    res.status(400).json(e);
+  }
 });
 
 app.post('/group/create', auth, async (req: any, res: any) => {
@@ -431,7 +503,6 @@ app.post('/challenge/:challengeId/delete', auth, async (req: any, res: any) => {
 
 app.post('/challenge/:challengeId/submit', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.challengeId);
-
   let result = await prisma.challengesResult.create({
     data: {
       proof: req.body.image,

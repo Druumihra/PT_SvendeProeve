@@ -23,9 +23,11 @@ model Users {
 model Friends {
   accepted Boolean @default(false)
   user     Users?  @relation(name: "user", fields: [usersId], references: [id])
-  usersId  Int     @id
+  usersId  Int
   friendof Users?  @relation(name: "friendof", fields: [friendid], references: [id])
   friendid Int
+
+  @@id([usersId, friendid])
 }
 
 model Groups {
