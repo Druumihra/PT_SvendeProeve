@@ -121,7 +121,6 @@ app.put('/edit/:id/user', auth, async (req: any, res: any) => {
     res.status(200).json('Success');
   } catch (e) {
     if (e instanceof PrismaClientKnownRequestError) {
-
       res.status(500).json('internal error');
     }
   }
@@ -272,7 +271,7 @@ app.post('/user/getFriends', auth, async (req: any, res: any) => {
   }
 });
 
-app.post('/group/create', await auth, async (req: any, res: any) => {
+app.post('/group/create', auth, async (req: any, res: any) => {
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
   }
@@ -332,7 +331,7 @@ app.get('/group/:groupId/getMembers', auth, async (req: any, res: any) => {
 app.post('/group/:groupId/addUser', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
   if (!(await isgroupadmin(id, req.body.adminId))) {
-    res.status(401).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   }
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
@@ -358,7 +357,7 @@ app.post('/group/:groupId/addAdmin', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
   if (!(await isgroupadmin(id, req.body.adminId))) {
-    res.status(401).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   }
   if (!req.body) {
     res.status(400).json('Please fill out all required fields.');
@@ -382,7 +381,7 @@ app.post('/group/:groupId/kickUser', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
   if (!(await isgroupadmin(id, req.body.adminId))) {
-    res.status(401).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   }
   let result = await prisma.groupMembers.delete({
     where: {
@@ -402,14 +401,14 @@ app.post('/group/:groupId/kickUser', auth, async (req: any, res: any) => {
       },
     });
   }
-  res.status(200).json('User successfully deleted');
+  res.status(200).json('User removed successfully');
 });
 
 app.post('/group/:groupId/delete', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
   if (!(await isgroupadmin(id, req.body.adminId))) {
-    res.status(401).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   }
   if (!req.body) {
     res.status(400).json('Invalid request body.');
@@ -426,7 +425,7 @@ app.put('/group/:groupId/edit', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.groupId);
 
   if (!(await isgroupadmin(id, req.body.userId))) {
-    res.status(401).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   }
   await prisma.groups.update({
     where: {
@@ -436,6 +435,7 @@ app.put('/group/:groupId/edit', auth, async (req: any, res: any) => {
       name: req.body.name,
     },
   });
+  res.status(200).json('Success');
 });
 
 app.post('/challenge/create', auth, async (req: any, res: any) => {
@@ -489,7 +489,7 @@ app.put('/challenge/:challengeId/end', auth, async (req: any, res: any) => {
   let id: number = await parseInt(req.params.challengeId);
 
   if (!(await isgroupadmin(req.body.groupId, req.body.userId))) {
-    res.status(401).json('Unauthorized');
+    res.status(403).json('Unauthorized');
   } else {
     let result = await prisma.challenges.update({
       where: {
@@ -510,7 +510,7 @@ app.delete(
     let id: number = await parseInt(req.params.challengeId);
 
     if (!(await isgroupadmin(req.body.groupId, req.body.userId))) {
-      res.status(401).json('Unauthorized');
+      res.status(403).json('Unauthorized');
     }
     let result = await prisma.challenges.delete({
       where: {
@@ -623,7 +623,7 @@ app.post(
     let id: number = await parseInt(req.params.challengeId);
 
     if (!(await isgroupadmin(req.body.groupId, req.body.adminId))) {
-      res.status(401).json('Unauthorized');
+      res.status(403).json('Unauthorized');
     } else {
       let result = await prisma.challengesResult.update({
         where: {
